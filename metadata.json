@@ -1,0 +1,6 @@
+{
+  "name": "Atrium — Ollama Roleplay Chat",
+  "description": "A dark-mode Material Design 3 roleplay chat workspace connected directly to your local Ollama instance.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}
