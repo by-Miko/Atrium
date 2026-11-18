@@ -38,12 +38,12 @@ function renderInlineFormatting(text: string, variant: 'user' | 'assistant'): Re
       nodes.push(
         <em
           key={`i-${keyCounter++}`}
-          className="italic opacity-90"
+          className="italic"
           style={{
             color:
               variant === 'user'
                 ? 'var(--chat-user-action-color, #E2DAFF)'
-                : 'var(--chat-action-color, #E7D8B6)',
+                : 'var(--chat-action-color, #CBD5E1)',
           }}
         >
           {token.slice(1, -1)}
@@ -85,7 +85,8 @@ export function MessageContent({
       style={{
         fontFamily: 'var(--chat-font-family, inherit)',
         fontSize: 'var(--chat-font-size, 15px)',
-        color: 'var(--chat-dialogue-color, #FFFFFF)',
+        color: 'var(--chat-dialogue-color, #F1F5F9)',
+        textShadow: '0 1px 2px rgba(0, 0, 0, 0.65)',
       }}
     >
       {segments.map((segment, segIdx) => {

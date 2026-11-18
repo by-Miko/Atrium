@@ -18,3 +18,5 @@ coverage/
 Thumbs.db
 *.log
 npm-debug.log*
+
+.aistudio/

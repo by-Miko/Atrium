@@ -119,6 +119,8 @@ export async function parseAtriumBackupFile(file: File): Promise<ParsedBackupRes
       greeting: typeof c.greeting === 'string' ? c.greeting : '',
       systemPrompt: typeof c.systemPrompt === 'string' ? c.systemPrompt : '',
       imageUrl: typeof c.imageUrl === 'string' ? c.imageUrl : undefined,
+      stageBackground:
+        typeof c.stageBackground === 'string' ? c.stageBackground : undefined,
       wallpaperUrl:
         typeof c.wallpaperUrl === 'string' ? c.wallpaperUrl : undefined,
       tags: Array.isArray(c.tags)

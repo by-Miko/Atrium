@@ -7,6 +7,12 @@ import type {
 export interface UIStrings {
   appTitle: string;
   skipIntro: string;
+  grandIntroSkipHint: string;
+  grandIntroMuteAudio: string;
+  grandIntroUnmuteAudio: string;
+  replayGrandIntroLabel: string;
+  replayGrandIntroHint: string;
+  replayGrandIntroButton: string;
   gallerySubtitle: (count: number) => string;
   newButton: string;
   searchPlaceholder: string;
@@ -299,6 +305,13 @@ export const TRANSLATIONS: Record<Language, UIStrings> = {
   en: {
     appTitle: 'Atrium',
     skipIntro: 'Skip',
+    grandIntroSkipHint: 'Click anywhere to skip',
+    grandIntroMuteAudio: 'Mute intro sound',
+    grandIntroUnmuteAudio: 'Unmute intro sound',
+    replayGrandIntroLabel: 'Cinematic Opening (Eclipse Astrolabe)',
+    replayGrandIntroHint:
+      'Plays automatically on first launch and once every 12 hours. Regular opens use the fast 2.5s Central Portal.',
+    replayGrandIntroButton: 'Replay Grand Intro',
     gallerySubtitle: (count) => `Character gallery · ${count}`,
     newButton: 'New',
     searchPlaceholder: 'Search personas, genres, prompts...',
@@ -527,7 +540,7 @@ export const TRANSLATIONS: Record<Language, UIStrings> = {
     enterSceneButton: 'Enter Scene',
     returnToSceneButton: 'Return to Scene',
     profilePortraitTab: 'Portrait',
-    profileWallpaperTab: 'Wallpaper',
+    profileWallpaperTab: 'Stage Scene',
     lightboxClose: 'Back',
     lobbyBackButton: 'Lobby',
     lobbyExitButton: 'Exit',
@@ -582,7 +595,7 @@ export const TRANSLATIONS: Record<Language, UIStrings> = {
     outroSessionSaved: 'Session saved locally in Atrium',
     outroCraftedBy: 'Crafted by Miko',
     reopenAtrium: 'Reopen Atrium',
-    appVersion: 'v1.3.2 (Hardened)',
+    appVersion: 'v1.4.0 (Hardened)',
     settingsWatermark: 'Atrium Engine • Original Architecture by Miko',
     ollamaStatusChecking: 'Ollama...',
     ollamaStatusReady: 'Ollama Ready',
@@ -609,15 +622,15 @@ export const TRANSLATIONS: Record<Language, UIStrings> = {
     roleLabel: 'Role / Archetype',
     rolePlaceholder: 'e.g. Airship Navigator',
     avatarCardImageLabel: 'Avatar Card Image',
-    wallpaperImageLabel: 'Full-Screen Chat Wallpaper',
+    wallpaperImageLabel: 'Stage Wallpaper (16:9)',
     clear: 'Clear',
     useAvatar: 'Use avatar',
     uploadAvatar: 'Upload Avatar',
-    uploadWallpaper: 'Upload Wallpaper',
+    uploadWallpaper: 'Upload Stage Scene',
     localImageSaved: 'Local image saved',
-    localWallpaperSaved: 'Local wallpaper saved',
+    localWallpaperSaved: 'Local stage scene saved',
     avatarUrlPlaceholder: 'Or paste image URL...',
-    wallpaperUrlPlaceholder: 'Optional custom wallpaper URL...',
+    wallpaperUrlPlaceholder: 'Optional 16:9 stage scene URL...',
     tagsLabel: 'Tags (comma-separated)',
     tagsPlaceholder: 'Sci-Fi, Mystery, Slow Burn',
     bioLabel: 'Short Bio',
@@ -685,6 +698,13 @@ export const TRANSLATIONS: Record<Language, UIStrings> = {
   es: {
     appTitle: 'Atrium',
     skipIntro: 'Saltar',
+    grandIntroSkipHint: 'Haz clic para saltar',
+    grandIntroMuteAudio: 'Silenciar sonido de intro',
+    grandIntroUnmuteAudio: 'Activar sonido de intro',
+    replayGrandIntroLabel: 'Apertura Cinematográfica (Eclipse Astrolabe)',
+    replayGrandIntroHint:
+      'Se reproduce automáticamente al instalar y una vez cada 12 horas. Los inicios diarios usan el Portal Central rápido de 2.5s.',
+    replayGrandIntroButton: 'Repetir Grand Intro',
     gallerySubtitle: (count) => `Galería de personajes · ${count}`,
     newButton: 'Nuevo',
     searchPlaceholder: 'Buscar personajes, géneros, prompts...',
@@ -914,7 +934,7 @@ export const TRANSLATIONS: Record<Language, UIStrings> = {
     enterSceneButton: 'Entrar a la Escena',
     returnToSceneButton: 'Volver a la Escena',
     profilePortraitTab: 'Retrato',
-    profileWallpaperTab: 'Fondo',
+    profileWallpaperTab: 'Escenario',
     lightboxClose: 'Volver',
     lobbyBackButton: 'Lobby',
     lobbyExitButton: 'Salir',
@@ -969,7 +989,7 @@ export const TRANSLATIONS: Record<Language, UIStrings> = {
     outroSessionSaved: 'Sesión guardada localmente en Atrium',
     outroCraftedBy: 'Crafted by Miko',
     reopenAtrium: 'Reabrir Atrium',
-    appVersion: 'v1.3.2 (Hardened)',
+    appVersion: 'v1.4.0 (Hardened)',
     settingsWatermark: 'Atrium Engine • Original Architecture by Miko',
     ollamaStatusChecking: 'Ollama...',
     ollamaStatusReady: 'Ollama Listo',
@@ -996,15 +1016,15 @@ export const TRANSLATIONS: Record<Language, UIStrings> = {
     roleLabel: 'Rol / Arquetipo',
     rolePlaceholder: 'ej. Navegante de Dirigible',
     avatarCardImageLabel: 'Imagen de Tarjeta / Avatar',
-    wallpaperImageLabel: 'Fondo de Pantalla del Chat',
+    wallpaperImageLabel: 'Escenario Panorámico (16:9)',
     clear: 'Limpiar',
     useAvatar: 'Usar avatar',
     uploadAvatar: 'Subir Avatar',
-    uploadWallpaper: 'Subir Fondo',
+    uploadWallpaper: 'Subir Escenario',
     localImageSaved: 'Imagen local guardada',
-    localWallpaperSaved: 'Fondo local guardado',
+    localWallpaperSaved: 'Escenario local guardado',
     avatarUrlPlaceholder: 'O pega una URL de imagen...',
-    wallpaperUrlPlaceholder: 'URL opcional para el fondo...',
+    wallpaperUrlPlaceholder: 'URL opcional de escenario 16:9...',
     tagsLabel: 'Etiquetas (separadas por comas)',
     tagsPlaceholder: 'Ciencia Ficción, Misterio, Drama',
     bioLabel: 'Biografía Corta',

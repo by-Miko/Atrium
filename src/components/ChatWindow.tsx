@@ -33,6 +33,7 @@ import {
   type FormEvent,
   type KeyboardEvent,
   type MouseEvent as ReactMouseEvent,
+  type ReactNode,
 } from 'react';
 import {
   isNativeElectronSpeechSupported,
@@ -53,6 +54,14 @@ import { MessageContent } from './MessageContent';
 
 const MAX_INPUT_CHARS = 2000;
 const MESSAGE_WINDOW_STEP = 50;
+
+const LIQUID_GLASS_PILL_STYLE = {
+  background: 'var(--theme-stage-pill-bg, rgba(15, 23, 42, 0.36))',
+  backdropFilter: 'blur(20px) saturate(160%)',
+  WebkitBackdropFilter: 'blur(20px) saturate(160%)',
+  boxShadow:
+    'inset 0 1px 1px rgba(255, 255, 255, 0.2), 0 8px 28px rgba(0, 0, 0, 0.28)',
+} as const;
 
 interface ChatWindowProps {
   t: UIStrings;
@@ -195,7 +204,12 @@ export function ChatWindow({
     onError: handleVoiceError,
   });
 
-  const activeWallpaper = character.wallpaperUrl || character.imageUrl;
+  const activeWallpaper =
+    character.stageBackground || character.wallpaperUrl || character.imageUrl;
+  const hasDedicatedStage = Boolean(
+    character.stageBackground ||
+      (character.wallpaperUrl && character.wallpaperUrl !== character.imageUrl)
+  );
 
   useEffect(() => {
     setWallpaperFailed(false);
@@ -209,7 +223,13 @@ export function ChatWindow({
     setIsHeaderCollapsed(false);
     setVisibleCount(MESSAGE_WINDOW_STEP);
     stopListening();
-  }, [character.id, character.imageUrl, character.wallpaperUrl, stopListening]);
+  }, [
+    character.id,
+    character.imageUrl,
+    character.stageBackground,
+    character.wallpaperUrl,
+    stopListening,
+  ]);
 
   useEffect(() => {
     if (!hideBubbles && !editingMessageId) {
@@ -257,8 +277,11 @@ export function ChatWindow({
   }, [isSceneMenuOpen]);
 
   useEffect(() => {
-    if (!parallaxEnabled && mouseParallaxRef.current) {
-      mouseParallaxRef.current.style.transform = 'translate3d(0px, 0px, 0)';
+    if (!parallaxEnabled) {
+      setParallaxY(0);
+      if (mouseParallaxRef.current) {
+        mouseParallaxRef.current.style.transform = 'translate3d(0px, 0px, 0)';
+      }
     }
     return () => {
       if (rafParallaxRef.current !== null) {
@@ -316,6 +339,10 @@ export function ChatWindow({
   }, []);
 
   const handleFeedScroll = () => {
+    if (!parallaxEnabled) {
+      if (parallaxY !== 0) setParallaxY(0);
+      return;
+    }
     const el = scrollContainerRef.current;
     if (!el) return;
     const maxScroll = el.scrollHeight - el.clientHeight;
@@ -324,7 +351,7 @@ export function ChatWindow({
       return;
     }
     const progress = Math.min(1, Math.max(0, el.scrollTop / maxScroll));
-    setParallaxY(Math.round(-progress * 20 * 10) / 10);
+    setParallaxY(Math.round((0.5 - progress) * 14 * 10) / 10);
   };
 
   const focusComposerTextarea = useCallback(() => {
@@ -478,6 +505,39 @@ export function ChatWindow({
   const lastMessage = messages[messages.length - 1];
   const hasPrecedingUserMessage = messages.some((m) => m.role === 'user');
 
+  const isCenteredLayout = wallpaperFit === 'contain';
+
+  const renderAdaptiveRow = (
+    children: ReactNode,
+    options?: { rowClassName?: string; colClassName?: string }
+  ) => (
+    <div
+      className={`mx-auto flex w-full max-w-3xl transition-all duration-300 ease-out lg:mx-0 lg:max-w-none ${
+        options?.rowClassName ?? ''
+      }`}
+    >
+      <div
+        aria-hidden="true"
+        className="hidden shrink-0 transition-all duration-300 ease-out lg:block"
+        style={{
+          flexGrow: isCenteredLayout ? 1 : 0,
+          flexBasis: isCenteredLayout ? '0px' : '2rem',
+        }}
+      />
+      <div
+        className={`w-full transition-all duration-300 ease-out lg:w-[47%] lg:max-w-[660px] lg:shrink-0 ${
+          options?.colClassName ?? ''
+        }`}
+      >
+        {children}
+      </div>
+      <div
+        aria-hidden="true"
+        className="hidden flex-1 transition-all duration-300 ease-out lg:block"
+      />
+    </div>
+  );
+
   const charCountClass =
     draft.length >= MAX_INPUT_CHARS
       ? 'text-rose-300'
@@ -489,58 +549,52 @@ export function ChatWindow({
     <main
       onMouseMove={handleStageMouseMove}
       onMouseLeave={resetMouseParallax}
-      className="relative flex h-full min-w-0 flex-1 flex-col overflow-hidden"
-      style={{ backgroundColor: 'var(--theme-bg)' }}
+      className="relative m-0 flex h-full w-full min-w-0 flex-1 flex-col overflow-hidden p-0"
     >
-      {/* Full-Screen Character Wallpaper with Scroll & Subtle Mouse Parallax */}
+      {/* Full-Screen Edge-to-Edge Character Scene Wallpaper */}
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute inset-0 z-0 overflow-hidden"
+        className="pointer-events-none fixed inset-0 z-0 m-0 h-screen w-screen overflow-hidden p-0"
+        style={{ backgroundColor: 'var(--theme-bg)' }}
       >
         <div
           ref={mouseParallaxRef}
-          className="h-full w-full will-change-transform transition-transform duration-300 ease-out"
-          style={{ transform: 'translate3d(0px, 0px, 0)' }}
+          className="m-0 h-full w-full p-0 transition-transform duration-150 ease-out will-change-transform"
         >
           <AnimatePresence mode="wait">
             {hasWallpaper ? (
               <motion.div
                 key={`${activeWallpaper}-${wallpaperFit}`}
                 initial={{ opacity: 0 }}
-                animate={{ opacity: hideBubbles ? 1 : 0.82 }}
+                animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
-                className="relative h-full w-full"
+                className="relative m-0 h-full w-full p-0"
               >
-                {wallpaperFit === 'contain' ? (
-                  <div
-                    aria-hidden="true"
-                    className="pointer-events-none absolute inset-0 scale-110 bg-cover bg-center opacity-28 blur-3xl"
-                    style={{ backgroundImage: `url("${activeWallpaper}")` }}
-                  />
-                ) : null}
                 <img
                   src={activeWallpaper}
                   alt=""
                   referrerPolicy="no-referrer"
                   onError={() => setWallpaperFailed(true)}
-                  className={`relative z-10 h-full w-full transition-transform duration-200 ease-out will-change-transform ${
+                  className={`m-0 block h-full w-full p-0 transition-transform duration-200 ease-out will-change-transform ${
                     wallpaperFit === 'contain'
                       ? 'object-contain object-center'
-                      : 'object-cover object-top'
+                      : hasDedicatedStage
+                        ? 'object-cover object-[70%_center] lg:object-center'
+                        : 'object-cover object-[70%_22%]'
                   }`}
                   style={
-                    wallpaperFit === 'contain'
-                      ? {
-                          objectPosition: 'center center',
-                          transformOrigin: 'center center',
-                          transform: `translate3d(0, ${Math.round(parallaxY * 0.4)}px, 0) scale(1.015)`,
-                        }
-                      : {
-                          objectPosition: 'top center',
-                          transformOrigin: 'top center',
-                          transform: `translate3d(0, ${parallaxY}px, 0) scale(1.05)`,
-                        }
+                    parallaxEnabled
+                      ? wallpaperFit === 'contain'
+                        ? {
+                            transformOrigin: 'center center',
+                            transform: `translate3d(0, ${Math.round(parallaxY * 0.4)}px, 0) scale(1.015)`,
+                          }
+                        : {
+                            transformOrigin: 'center center',
+                            transform: `translate3d(0, ${parallaxY}px, 0) scale(1.045)`,
+                          }
+                      : undefined
                   }
                 />
               </motion.div>
@@ -550,29 +604,23 @@ export function ChatWindow({
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                className="h-full w-full bg-[radial-gradient(circle_at_35%_25%,var(--theme-accent-soft),transparent_60%)]"
+                className="h-full w-full bg-[radial-gradient(circle_at_70%_35%,var(--theme-accent-soft),transparent_60%)]"
               />
             )}
           </AnimatePresence>
         </div>
 
+        {/* Subtle, uniform ambient tint so full artwork stays crisp and legible */}
         <div
-          className="absolute inset-0 transition-opacity duration-300"
-          style={{
-            backgroundColor: 'var(--theme-scrim-tint)',
-            opacity: hideBubbles ? 0.08 : 1,
-          }}
-        />
-        <div
-          className={`absolute inset-0 bg-gradient-to-b from-black/35 via-transparent to-black/60 transition-opacity duration-300 ${
-            hideBubbles ? 'opacity-20' : 'opacity-100'
+          className={`absolute inset-0 m-0 h-full w-full bg-black/15 p-0 transition-opacity duration-300 ${
+            hideBubbles ? 'opacity-0' : 'opacity-100'
           }`}
         />
       </div>
 
       {/* Minimalist Two-Corner Spatial Top Bar (Collapsible) */}
       {isHeaderCollapsed ? (
-        <div className="pointer-events-none absolute top-3 right-4 z-30 flex items-center gap-2 sm:right-6">
+        <div className="pointer-events-none absolute top-3.5 right-4 z-30 flex items-center gap-2 sm:right-6">
           <button
             type="button"
             onClick={() => {
@@ -582,11 +630,12 @@ export function ChatWindow({
             aria-pressed={hideBubbles}
             aria-label={hideBubbles ? t.cinemaModeExit : t.cinemaModeEnter}
             title={hideBubbles ? t.cinemaModeExit : t.cinemaModeEnter}
-            className={`pointer-events-auto inline-flex h-9 w-9 items-center justify-center rounded-full border backdrop-blur-xl transition-colors focus-visible:outline-2 focus-visible:outline-[var(--theme-accent)] ${
+            className={`pointer-events-auto inline-flex h-10 w-10 items-center justify-center rounded-full border transition-all focus-visible:outline-2 focus-visible:outline-[var(--theme-accent)] ${
               hideBubbles
-                ? 'border-[var(--theme-accent)] bg-black/55 text-[var(--theme-accent)] shadow-lg'
-                : 'border-white/14 bg-black/45 text-white/85 shadow-lg hover:bg-black/65 hover:text-white'
+                ? 'border-[var(--theme-accent)]/70 text-[var(--theme-accent)]'
+                : 'border-white/[0.15] text-white/90 hover:border-white/30 hover:text-white'
             }`}
+            style={LIQUID_GLASS_PILL_STYLE}
           >
             {hideBubbles ? (
               <EyeOff className="h-4 w-4" />
@@ -601,23 +650,17 @@ export function ChatWindow({
               onClick={() => setIsHeaderCollapsed(false)}
               aria-label={t.expandHeader}
               title={t.expandHeader}
-              className="pointer-events-auto inline-flex h-9 items-center gap-1.5 rounded-full border border-white/16 bg-black/50 px-3 text-xs font-medium text-white/85 shadow-[0_10px_28px_rgba(0,0,0,0.48)] backdrop-blur-2xl transition-colors hover:border-white/30 hover:bg-black/70 hover:text-white focus-visible:outline-2 focus-visible:outline-[var(--theme-accent)]"
-              style={{ backgroundColor: 'var(--theme-glass)' }}
+              className="pointer-events-auto inline-flex h-10 items-center gap-1.5 rounded-full border border-white/[0.15] px-3.5 text-xs font-medium text-white/90 transition-all hover:border-white/30 hover:text-white focus-visible:outline-2 focus-visible:outline-[var(--theme-accent)]"
+              style={LIQUID_GLASS_PILL_STYLE}
             >
               <span className="max-w-[140px] truncate">{character.name}</span>
-              <ChevronDown className="h-3.5 w-3.5 shrink-0 text-white/65" />
+              <ChevronDown className="h-3.5 w-3.5 shrink-0 text-white/70" />
             </button>
           ) : null}
         </div>
       ) : (
-        <header
-          className={`relative z-30 flex shrink-0 items-center justify-between gap-4 px-4 py-3 transition-colors duration-300 sm:px-6 ${
-            hideBubbles
-              ? 'border-b border-transparent bg-transparent'
-              : 'border-b border-white/10 bg-black/25 backdrop-blur-xl'
-          }`}
-        >
-        {/* Top-Left: Lobby Pill + Clickable Avatar & Name with Pulsing Generation Aura */}
+        <header className="relative z-30 flex shrink-0 items-center justify-between gap-4 px-4 py-3.5 sm:px-6">
+        {/* Top-Left: Floating Liquid Glass Lobby Pill + Character Badge Pill */}
         <div
           className={`flex min-w-0 items-center gap-2.5 transition-opacity duration-200 ${
             hideBubbles ? 'pointer-events-none opacity-0' : 'opacity-100'
@@ -626,7 +669,8 @@ export function ChatWindow({
           <button
             type="button"
             onClick={onReturnToLobby}
-            className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-full border border-white/14 bg-white/[0.06] px-3.5 text-xs font-semibold text-white/90 backdrop-blur-xl transition-colors hover:border-white/25 hover:bg-white/[0.12] hover:text-white focus-visible:outline-2 focus-visible:outline-[var(--theme-accent)] whitespace-nowrap"
+            className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-full border border-white/[0.15] px-4 text-xs font-semibold text-white/95 transition-all hover:border-white/30 hover:text-white focus-visible:outline-2 focus-visible:outline-[var(--theme-accent)] whitespace-nowrap"
+            style={LIQUID_GLASS_PILL_STYLE}
           >
             <ArrowLeft className="h-3.5 w-3.5" />
             <span>{t.lobbyBackButton}</span>
@@ -637,13 +681,14 @@ export function ChatWindow({
             onClick={onOpenCharacterProfile}
             title={t.viewCharacterProfile}
             aria-label={`${t.viewCharacterProfile}: ${character.name}`}
-            className="group flex min-w-0 items-center gap-3 rounded-2xl py-1 pr-2.5 pl-1 text-left transition-colors hover:bg-white/[0.06] focus-visible:outline-2 focus-visible:outline-[var(--theme-accent)]"
+            className="group flex min-w-0 items-center gap-2.5 rounded-full border border-white/[0.15] py-1 pr-4 pl-1.5 text-left transition-all hover:border-white/30 focus-visible:outline-2 focus-visible:outline-[var(--theme-accent)]"
+            style={LIQUID_GLASS_PILL_STYLE}
           >
             <div className="relative shrink-0">
               {isStreaming ? (
                 <span
                   aria-hidden="true"
-                  className="pointer-events-none absolute -inset-1 rounded-[14px] bg-gradient-to-tr from-amber-300/85 via-amber-200/75 to-indigo-400/85 opacity-85 blur-[3px] animate-pulse"
+                  className="pointer-events-none absolute -inset-1 rounded-full bg-gradient-to-tr from-amber-300/85 via-amber-200/75 to-indigo-400/85 opacity-85 blur-[3px] animate-pulse"
                 />
               ) : null}
 
@@ -653,10 +698,10 @@ export function ChatWindow({
                   alt={character.name}
                   referrerPolicy="no-referrer"
                   onError={() => setAvatarFailed(true)}
-                  className={`relative z-10 h-10 w-10 shrink-0 rounded-xl border object-cover shadow transition-all group-hover:scale-[1.03] ${
+                  className={`relative z-10 h-8 w-8 shrink-0 rounded-full border object-cover shadow transition-all group-hover:scale-[1.04] ${
                     isStreaming
                       ? 'border-amber-200/85 ring-2 ring-amber-300/60 shadow-[0_0_18px_rgba(251,191,36,0.45),0_0_24px_rgba(99,102,241,0.4)]'
-                      : 'border-white/15'
+                      : 'border-white/20'
                   }`}
                 />
               ) : (
@@ -664,7 +709,7 @@ export function ChatWindow({
                   icon={character.icon}
                   tone={character.tone}
                   size="sm"
-                  className={`relative z-10 ${
+                  className={`relative z-10 !h-8 !w-8 !rounded-full ${
                     isStreaming
                       ? 'ring-2 ring-amber-300/65 shadow-[0_0_18px_rgba(251,191,36,0.45)]'
                       : ''
@@ -674,10 +719,10 @@ export function ChatWindow({
             </div>
 
             <div className="min-w-0">
-              <h2 className="truncate font-display text-[15px] font-semibold text-white transition-colors group-hover:text-[var(--theme-accent)]">
+              <h2 className="truncate font-display text-[13.5px] leading-tight font-semibold text-white transition-colors group-hover:text-[var(--theme-accent)]">
                 {character.name}
               </h2>
-              <p className="truncate text-xs text-[var(--theme-muted)]">
+              <p className="truncate text-[11px] leading-tight text-white/65">
                 <span>{character.role}</span>
                 <span aria-hidden="true"> · </span>
                 <span className="font-mono">
@@ -688,7 +733,7 @@ export function ChatWindow({
           </button>
         </div>
 
-        {/* Top-Right: Collapse Header, Cinema Mode (Eye) & Scene Menu (•••) */}
+        {/* Top-Right: Collapse Header, Cinema Mode (Eye) & Scene Menu (•••) Glass Pills */}
         <div className="relative flex shrink-0 items-center gap-2">
           <button
             type="button"
@@ -698,9 +743,10 @@ export function ChatWindow({
             }}
             aria-label={t.collapseHeader}
             title={t.collapseHeader}
-            className={`inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/14 bg-white/[0.06] text-white/75 backdrop-blur-xl transition-all hover:bg-white/[0.12] hover:text-white focus-visible:outline-2 focus-visible:outline-[var(--theme-accent)] ${
+            className={`inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/[0.15] text-white/85 transition-all hover:border-white/30 hover:text-white focus-visible:outline-2 focus-visible:outline-[var(--theme-accent)] ${
               hideBubbles ? 'pointer-events-none opacity-0' : 'opacity-100'
             }`}
+            style={LIQUID_GLASS_PILL_STYLE}
           >
             <ChevronUp className="h-4 w-4" />
           </button>
@@ -714,11 +760,12 @@ export function ChatWindow({
             aria-pressed={hideBubbles}
             aria-label={hideBubbles ? t.cinemaModeExit : t.cinemaModeEnter}
             title={hideBubbles ? t.cinemaModeExit : t.cinemaModeEnter}
-            className={`inline-flex h-10 w-10 items-center justify-center rounded-full border backdrop-blur-xl transition-colors focus-visible:outline-2 focus-visible:outline-[var(--theme-accent)] ${
+            className={`inline-flex h-10 w-10 items-center justify-center rounded-full border transition-all focus-visible:outline-2 focus-visible:outline-[var(--theme-accent)] ${
               hideBubbles
-                ? 'border-[var(--theme-accent)] bg-black/55 text-[var(--theme-accent)] shadow-lg'
-                : 'border-white/14 bg-white/[0.06] text-white/85 hover:bg-white/[0.12] hover:text-white'
+                ? 'border-[var(--theme-accent)]/75 text-[var(--theme-accent)]'
+                : 'border-white/[0.15] text-white/90 hover:border-white/30 hover:text-white'
             }`}
+            style={LIQUID_GLASS_PILL_STYLE}
           >
             {hideBubbles ? (
               <EyeOff className="h-4 w-4" />
@@ -740,11 +787,12 @@ export function ChatWindow({
               aria-haspopup="menu"
               aria-label={t.sceneMenuLabel}
               title={t.sceneMenuLabel}
-              className={`inline-flex h-10 w-10 items-center justify-center rounded-full border backdrop-blur-xl transition-colors focus-visible:outline-2 focus-visible:outline-[var(--theme-accent)] ${
+              className={`inline-flex h-10 w-10 items-center justify-center rounded-full border transition-all focus-visible:outline-2 focus-visible:outline-[var(--theme-accent)] ${
                 isSceneMenuOpen
-                  ? 'border-[var(--theme-accent)] bg-[var(--theme-accent-soft)] text-[var(--theme-accent)]'
-                  : 'border-white/14 bg-white/[0.06] text-white/85 hover:bg-white/[0.12] hover:text-white'
+                  ? 'border-[var(--theme-accent)]/75 text-[var(--theme-accent)]'
+                  : 'border-white/[0.15] text-white/90 hover:border-white/30 hover:text-white'
               }`}
+              style={LIQUID_GLASS_PILL_STYLE}
             >
               <MoreHorizontal className="h-4 w-4" />
             </button>
@@ -758,14 +806,21 @@ export function ChatWindow({
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: -6, scale: 0.96 }}
                   transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
-                  className="absolute right-0 mt-2.5 w-72 origin-top-right rounded-[22px] border border-[var(--theme-border)] bg-[var(--theme-glass-strong)] p-2 text-[var(--theme-text)] shadow-[0_24px_64px_rgba(0,0,0,0.75)] backdrop-blur-2xl"
+                  className="absolute right-0 mt-2.5 w-72 origin-top-right rounded-3xl border border-white/[0.15] p-2 text-[var(--theme-text)]"
+                  style={{
+                    background: 'var(--theme-glass-strong)',
+                    backdropFilter: 'blur(24px) saturate(160%)',
+                    WebkitBackdropFilter: 'blur(24px) saturate(160%)',
+                    boxShadow:
+                      'inset 0 1px 1px rgba(255, 255, 255, 0.2), 0 16px 48px rgba(0, 0, 0, 0.45)',
+                  }}
                 >
                   {/* 1. Background Framing */}
                   <div className="px-2.5 py-2">
-                    <p className="mb-2 text-[11px] font-medium text-[var(--theme-muted)]">
+                    <p className="mb-2 text-[11px] font-medium text-white/65">
                       {t.sceneMenuBackgroundFraming}
                     </p>
-                    <div className="grid grid-cols-2 gap-1 rounded-xl border border-white/10 bg-black/40 p-1">
+                    <div className="grid grid-cols-2 gap-1 rounded-2xl border border-white/[0.12] bg-slate-950/35 p-1">
                       <button
                         type="button"
                         role="menuitemradio"
@@ -909,36 +964,42 @@ export function ChatWindow({
           role="alert"
           className="relative z-10 shrink-0 border-b border-rose-500/35 bg-rose-950/75 px-4 py-3 backdrop-blur-xl sm:px-6"
         >
-          <div className="mx-auto flex max-w-3xl flex-wrap items-center justify-between gap-3">
-            <div className="flex min-w-0 flex-1 items-start gap-2.5 text-sm text-rose-100">
-              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-rose-300" />
-              <div className="min-w-0">
-                <p className="font-medium">{errorMessage}</p>
-                <p className="mt-0.5 text-xs text-rose-200/80">
-                  <span className="font-mono">
-                    {ollamaUrl.replace(/\/+$/, '')}
-                    {provider === 'openai' ? '/chat/completions' : '/api/chat'}
-                  </span>
-                </p>
+          {renderAdaptiveRow(
+            <>
+              <div className="flex min-w-0 flex-1 items-start gap-2.5 text-sm text-rose-100">
+                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-rose-300" />
+                <div className="min-w-0">
+                  <p className="font-medium">{errorMessage}</p>
+                  <p className="mt-0.5 text-xs text-rose-200/80">
+                    <span className="font-mono">
+                      {ollamaUrl.replace(/\/+$/, '')}
+                      {provider === 'openai' ? '/chat/completions' : '/api/chat'}
+                    </span>
+                  </p>
+                </div>
               </div>
-            </div>
-            <div className="flex items-center gap-2 shrink-0">
-              <button
-                type="button"
-                onClick={onOpenSettings}
-                className="rounded-full border border-rose-300/25 bg-rose-900/60 px-3.5 py-1.5 text-xs font-medium text-rose-50 transition-colors hover:bg-rose-800/75 whitespace-nowrap"
-              >
-                {t.openSettings}
-              </button>
-              <button
-                type="button"
-                onClick={onDismissError}
-                className="rounded-full px-2.5 py-1.5 text-xs font-medium text-rose-200 transition-colors hover:bg-white/10 whitespace-nowrap"
-              >
-                {t.dismiss}
-              </button>
-            </div>
-          </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={onOpenSettings}
+                  className="rounded-full border border-rose-300/25 bg-rose-900/60 px-3.5 py-1.5 text-xs font-medium text-rose-50 transition-colors hover:bg-rose-800/75 whitespace-nowrap"
+                >
+                  {t.openSettings}
+                </button>
+                <button
+                  type="button"
+                  onClick={onDismissError}
+                  className="rounded-full px-2.5 py-1.5 text-xs font-medium text-rose-200 transition-colors hover:bg-white/10 whitespace-nowrap"
+                >
+                  {t.dismiss}
+                </button>
+              </div>
+            </>,
+            {
+              colClassName:
+                'flex flex-wrap items-center justify-between gap-3',
+            }
+          )}
         </div>
       ) : null}
 
@@ -954,12 +1015,15 @@ export function ChatWindow({
         className={`relative z-10 flex-1 overflow-y-auto px-4 py-6 sm:px-6 ${
           hideBubbles ? 'cursor-pointer select-none' : ''
         }`}
+        style={{
+          maskImage:
+            'linear-gradient(to bottom, transparent 0%, black 10%, black 95%, transparent 100%)',
+          WebkitMaskImage:
+            'linear-gradient(to bottom, transparent 0%, black 10%, black 95%, transparent 100%)',
+        }}
       >
-        <div
-          className={`mx-auto flex min-h-full max-w-3xl flex-col justify-end gap-5 ${
-            hideBubbles ? 'pointer-events-none' : ''
-          }`}
-        >
+        {renderAdaptiveRow(
+          <>
           {hiddenOlderCount > 0 ? (
             <div className="flex justify-center pb-1">
               <button
@@ -1032,28 +1096,33 @@ export function ChatWindow({
                     isEditingThis ? 'w-full sm:w-[76%]' : ''
                   } ${
                     isUser
-                      ? 'rounded-[24px] rounded-tr-[6px] px-4 py-3 text-white shadow-[0_10px_34px_rgba(0,0,0,0.4)]'
+                      ? 'rounded-3xl rounded-br-md px-4 py-3 text-[#F1F5F9]'
                       : message.isError
-                        ? 'rounded-[24px] rounded-tl-[6px] border-rose-500/35 bg-rose-950/65 px-4 py-3.5 text-rose-100 shadow-[0_10px_34px_rgba(0,0,0,0.45)] backdrop-blur-xl'
-                        : 'rounded-[24px] rounded-tl-[6px] px-4 py-3.5 text-[var(--theme-text)] shadow-[0_12px_36px_rgba(0,0,0,0.45)]'
+                        ? 'rounded-3xl rounded-bl-md border-rose-500/35 bg-rose-950/65 px-4 py-3.5 text-rose-100 shadow-[0_10px_34px_rgba(0,0,0,0.45)] backdrop-blur-xl'
+                        : 'rounded-3xl rounded-bl-md px-4 py-3.5 text-[#F1F5F9]'
                   }`}
                   style={
                     isUser
                       ? {
                           backgroundColor: 'var(--bubble-user-bg)',
                           borderColor: 'var(--bubble-user-border)',
-                          backdropFilter: 'blur(var(--chat-glass-blur, 20px))',
+                          backdropFilter:
+                            'blur(var(--chat-glass-blur, 20px)) saturate(160%)',
                           WebkitBackdropFilter:
-                            'blur(var(--chat-glass-blur, 20px))',
+                            'blur(var(--chat-glass-blur, 20px)) saturate(160%)',
+                          boxShadow:
+                            'inset 0 1px 1px rgba(255, 255, 255, 0.2), 0 8px 32px rgba(0, 0, 0, 0.3)',
                         }
                       : !message.isError
                         ? {
                             backgroundColor: 'var(--bubble-assistant-bg)',
                             borderColor: 'var(--bubble-assistant-border)',
                             backdropFilter:
-                              'blur(var(--chat-glass-blur, 20px))',
+                              'blur(var(--chat-glass-blur, 20px)) saturate(160%)',
                             WebkitBackdropFilter:
-                              'blur(var(--chat-glass-blur, 20px))',
+                              'blur(var(--chat-glass-blur, 20px)) saturate(160%)',
+                            boxShadow:
+                              'inset 0 1px 1px rgba(255, 255, 255, 0.2), 0 8px 32px rgba(0, 0, 0, 0.3)',
                           }
                         : undefined
                   }
@@ -1097,6 +1166,7 @@ export function ChatWindow({
                             cancelEditingMessage();
                           }
                         }}
+                        style={{ fontFamily: 'var(--chat-font-family, inherit)' }}
                         className="w-full resize-none rounded-2xl border border-white/20 bg-black/45 p-3 text-[15px] leading-relaxed text-white focus:border-[var(--theme-accent)] focus:outline-none"
                       />
                       <div className="flex items-center justify-between gap-2">
@@ -1199,7 +1269,7 @@ export function ChatWindow({
                                       onClick={onRegenerateLastResponse}
                                       aria-label={t.regenerateResponse}
                                       title={t.regenerateResponse}
-                                      className="inline-flex h-7 items-center gap-1.5 rounded-full border border-white/12 bg-black/25 px-2.5 text-[11px] font-medium text-[var(--theme-muted)] transition-colors hover:border-[var(--theme-accent)]/50 hover:bg-black/45 hover:text-white disabled:opacity-40"
+                                      className="inline-flex h-7 items-center gap-1.5 rounded-full border border-white/[0.15] bg-black/25 px-2.5 text-[11px] font-medium text-white/75 transition-colors hover:border-white/30 hover:bg-black/45 hover:text-white disabled:opacity-40"
                                     >
                                       <RefreshCw className="h-3 w-3" />
                                       <span>{t.regenerateResponse}</span>
@@ -1211,7 +1281,7 @@ export function ChatWindow({
                                         onClick={onContinueLastResponse}
                                         aria-label={t.continueResponse}
                                         title={t.continueResponse}
-                                        className="inline-flex h-7 items-center gap-1.5 rounded-full border border-white/12 bg-black/25 px-2.5 text-[11px] font-medium text-[var(--theme-muted)] transition-colors hover:border-[var(--theme-accent)]/50 hover:bg-black/45 hover:text-white disabled:opacity-40"
+                                        className="inline-flex h-7 items-center gap-1.5 rounded-full border border-white/[0.15] bg-black/25 px-2.5 text-[11px] font-medium text-white/75 transition-colors hover:border-white/30 hover:bg-black/45 hover:text-white disabled:opacity-40"
                                       >
                                         <ArrowRight className="h-3 w-3" />
                                         <span>{t.continueResponse}</span>
@@ -1223,7 +1293,7 @@ export function ChatWindow({
                                   <div
                                     role="group"
                                     aria-label={`${activeSwipeIdx + 1} / ${totalSwipes}`}
-                                    className="inline-flex h-7 items-center gap-0.5 rounded-full border border-white/12 bg-black/25 px-1 text-[11px] font-mono tabular-nums text-[var(--theme-muted)]"
+                                    className="inline-flex h-7 items-center gap-0.5 rounded-full border border-white/[0.15] bg-black/25 px-1 text-[11px] font-mono tabular-nums text-white/75"
                                   >
                                     <button
                                       type="button"
@@ -1239,7 +1309,7 @@ export function ChatWindow({
                                     >
                                       <ChevronLeft className="h-3 w-3" />
                                     </button>
-                                    <span className="px-1 text-white/80 select-none">
+                                    <span className="px-1 text-white/85 select-none">
                                       {activeSwipeIdx + 1} / {totalSwipes}
                                     </span>
                                     <button
@@ -1265,7 +1335,7 @@ export function ChatWindow({
                                   onClick={() => onDeleteMessage(message.id)}
                                   aria-label={t.deleteMessage}
                                   title={t.deleteMessage}
-                                  className="inline-flex h-7 items-center gap-1 rounded-full border border-white/12 bg-black/25 px-2.5 text-[11px] font-medium text-[var(--theme-muted)] transition-colors hover:border-rose-400/40 hover:bg-rose-950/60 hover:text-rose-200 disabled:opacity-40"
+                                  className="inline-flex h-7 items-center gap-1 rounded-full border border-white/[0.15] bg-black/25 px-2.5 text-[11px] font-medium text-white/75 transition-colors hover:border-rose-400/40 hover:bg-rose-950/60 hover:text-rose-200 disabled:opacity-40"
                                 >
                                   <Trash2 className="h-3 w-3" />
                                   {isLatestAssistantMessage ? (
@@ -1298,7 +1368,14 @@ export function ChatWindow({
             );
           })}
           <div ref={messagesEndRef} />
-        </div>
+          </>,
+          {
+            rowClassName: 'min-h-full',
+            colClassName: `flex min-h-full flex-col justify-end gap-5 ${
+              hideBubbles ? 'pointer-events-none' : ''
+            }`,
+          }
+        )}
       </motion.div>
 
       {/* Compact Collapsible Glassmorphic Composer Dock */}
@@ -1308,25 +1385,27 @@ export function ChatWindow({
           y: hideBubbles ? 16 : 0,
         }}
         transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
-        className={`relative z-10 shrink-0 px-4 pt-1.5 pb-3 sm:px-6 sm:pb-4 ${
+        className={`relative z-10 shrink-0 px-4 pt-1.5 pb-3 sm:px-6 sm:pb-4 lg:pb-6 ${
           hideBubbles ? 'pointer-events-none' : ''
         }`}
       >
-        {voiceError ? (
-          <div
-            role="status"
-            className="mx-auto mb-2 flex max-w-3xl items-center justify-between gap-3 rounded-2xl border border-amber-400/30 bg-amber-950/75 px-4 py-2 text-xs text-amber-100 backdrop-blur-xl"
-          >
-            <span>{voiceError}</span>
-            <button
-              type="button"
-              onClick={() => setVoiceError(null)}
-              className="font-medium text-amber-200 hover:underline whitespace-nowrap"
-            >
-              {t.dismiss}
-            </button>
-          </div>
-        ) : null}
+        {voiceError
+          ? renderAdaptiveRow(
+              <div
+                role="status"
+                className="mb-2 flex items-center justify-between gap-3 rounded-2xl border border-amber-400/30 bg-amber-950/75 px-4 py-2 text-xs text-amber-100 backdrop-blur-xl"
+              >
+                <span>{voiceError}</span>
+                <button
+                  type="button"
+                  onClick={() => setVoiceError(null)}
+                  className="font-medium text-amber-200 hover:underline whitespace-nowrap"
+                >
+                  {t.dismiss}
+                </button>
+              </div>
+            )
+          : null}
 
         <AnimatePresence mode="wait" initial={false}>
           {isComposerCollapsed ? (
@@ -1336,12 +1415,19 @@ export function ChatWindow({
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.92, y: 6 }}
               transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
-              className="flex justify-end"
             >
-              <div
-                className="flex w-fit max-w-full items-center gap-1 rounded-full border border-white/16 bg-black/50 p-1 pl-3.5 shadow-[0_10px_32px_rgba(0,0,0,0.52)] backdrop-blur-2xl"
-                style={{ backgroundColor: 'var(--theme-glass)' }}
-              >
+              {renderAdaptiveRow(
+                <div
+                  className="flex w-fit max-w-full items-center gap-1 rounded-full border border-white/[0.16] p-1 pl-4 shadow-[inset_0_1px_1px_rgba(255,255,255,0.2),0_8px_32px_rgba(0,0,0,0.3)]"
+                  style={{
+                    background:
+                      'var(--theme-stage-composer-bg, var(--theme-glass))',
+                    backdropFilter:
+                      'blur(var(--chat-glass-blur, 24px)) saturate(160%)',
+                    WebkitBackdropFilter:
+                      'blur(var(--chat-glass-blur, 24px)) saturate(160%)',
+                  }}
+                >
                 <button
                   type="button"
                   onClick={expandComposerAndFocus}
@@ -1388,7 +1474,9 @@ export function ChatWindow({
                     <Mic className="h-3.5 w-3.5" />
                   )}
                 </button>
-              </div>
+                </div>,
+                { colClassName: 'flex justify-end' }
+              )}
             </motion.div>
           ) : (
             <motion.div
@@ -1398,11 +1486,20 @@ export function ChatWindow({
               exit={{ opacity: 0, scale: 0.95, y: 8 }}
               transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
             >
-              <form
-                onSubmit={handleSubmit}
-                className="mx-auto flex min-h-[48px] max-w-3xl items-end gap-1.5 rounded-[24px] border border-white/14 bg-black/45 px-1.5 py-1.5 pl-4 shadow-[0_12px_40px_rgba(0,0,0,0.5)] backdrop-blur-2xl transition-colors focus-within:border-[var(--theme-accent)]/65"
-                style={{ backgroundColor: 'var(--theme-glass)' }}
-              >
+              {renderAdaptiveRow(
+                <>
+                  <form
+                    onSubmit={handleSubmit}
+                    className="flex min-h-[48px] w-full items-end gap-1.5 rounded-3xl border border-white/[0.16] px-1.5 py-1.5 pl-4 shadow-[inset_0_1px_1px_rgba(255,255,255,0.2),0_8px_32px_rgba(0,0,0,0.3)] transition-all duration-200 focus-within:border-[var(--theme-accent)]/60 focus-within:shadow-[inset_0_1px_1px_rgba(255,255,255,0.25),0_8px_32px_rgba(0,0,0,0.35),0_0_24px_var(--theme-accent-soft)]"
+                    style={{
+                      background:
+                        'var(--theme-stage-composer-bg, var(--theme-glass))',
+                      backdropFilter:
+                        'blur(var(--chat-glass-blur, 24px)) saturate(160%)',
+                      WebkitBackdropFilter:
+                        'blur(var(--chat-glass-blur, 24px)) saturate(160%)',
+                    }}
+                  >
                 <textarea
                   ref={textareaRef}
                   rows={1}
@@ -1418,7 +1515,10 @@ export function ChatWindow({
                       : t.replyPlaceholder(character.name)
                   }
                   aria-label={t.replyPlaceholder(character.name)}
-                  style={{ height: '34px' }}
+                  style={{
+                    height: '34px',
+                    fontFamily: 'var(--chat-font-family, inherit)',
+                  }}
                   className="max-h-[156px] min-h-[34px] flex-1 resize-none bg-transparent py-[5px] text-[14.5px] leading-[22px] text-white placeholder-white/45 transition-[height] duration-150 ease-out focus:outline-none"
                 />
 
@@ -1493,18 +1593,20 @@ export function ChatWindow({
                     <ArrowUp className="h-4 w-4" strokeWidth={2.25} />
                   </button>
                 )}
-              </form>
+                  </form>
 
-              <div className="mx-auto mt-1.5 flex max-w-3xl items-center justify-between gap-3 px-3 text-[10.5px] leading-none">
-                <span className="truncate text-white/45">
-                  {t.composerHint(ollamaUrl)}
-                </span>
-                <span
-                  className={`shrink-0 font-mono tabular-nums ${charCountClass}`}
-                >
-                  {t.charCounter(draft.length, MAX_INPUT_CHARS)}
-                </span>
-              </div>
+                  <div className="mt-1.5 flex items-center justify-between gap-3 px-3 text-[10.5px] leading-none [text-shadow:0_1px_2px_rgba(0,0,0,0.85)]">
+                    <span className="truncate text-white/65">
+                      {t.composerHint(ollamaUrl)}
+                    </span>
+                    <span
+                      className={`shrink-0 font-mono tabular-nums ${charCountClass}`}
+                    >
+                      {t.charCounter(draft.length, MAX_INPUT_CHARS)}
+                    </span>
+                  </div>
+                </>
+              )}
             </motion.div>
           )}
         </AnimatePresence>

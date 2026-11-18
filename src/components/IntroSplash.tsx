@@ -13,6 +13,9 @@ const INNER_ARCH_PATH =
 
 const WORDMARK_LETTERS = ['t', 'r', 'i', 'u', 'm'] as const;
 
+// Subtle ~2% SVG fractal film-grain data URL to eliminate 8-bit IPS gradient banding
+const FILM_GRAIN_SVG = `url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E")`;
+
 export function IntroSplash({
   skipLabel = 'Skip',
   onComplete,
@@ -20,13 +23,13 @@ export function IntroSplash({
   const completedRef = useRef(false);
 
   useEffect(() => {
-    // Hold through 2.8s-3.0s then crossfade (0.6s) into Lobby right at 3.6s
+    // Fast 2.5s Central Portal intro for regular opens during the same day
     const doneTimer = window.setTimeout(() => {
       if (!completedRef.current) {
         completedRef.current = true;
         onComplete();
       }
-    }, 3000);
+    }, 2500);
 
     return () => {
       window.clearTimeout(doneTimer);
@@ -58,37 +61,29 @@ export function IntroSplash({
       className="fixed inset-0 z-[100] flex items-center justify-center overflow-hidden select-none"
       style={{
         willChange: 'transform, opacity',
-        background:
-          'radial-gradient(circle at 50% 48%, #1C1635 0%, #0E0B1A 48%, #07060C 100%)',
+        backgroundColor: '#010205',
+        backgroundImage:
+          'radial-gradient(circle at 50% 48%, #070C18 0%, #03050B 45%, #010205 100%)',
       }}
     >
-      {/* Soft breathing ambient radial glow */}
-      <motion.div
+      {/* Subtle 2% fine film-grain texture to eliminate 8-bit IPS gradient banding */}
+      <div
         aria-hidden="true"
-        initial={{ opacity: 0.32, scale: 0.88 }}
-        animate={{
-          opacity: [0.32, 0.72, 0.56],
-          scale: [0.88, 1.08, 1],
-        }}
-        transition={{
-          duration: 3.0,
-          ease: 'easeInOut',
-        }}
-        className="pointer-events-none absolute h-[480px] w-[480px] rounded-full blur-[100px]"
+        className="pointer-events-none absolute inset-0 z-0 opacity-[0.02]"
         style={{
-          background:
-            'radial-gradient(circle, rgba(167,139,250,0.28) 0%, rgba(253,230,138,0.14) 38%, rgba(124,58,237,0.06) 65%, transparent 78%)',
+          backgroundImage: FILM_GRAIN_SVG,
+          backgroundRepeat: 'repeat',
         }}
       />
 
       {/* Centered "Central Portal" Logo Lockup */}
       <div className="relative z-10 flex items-center justify-center px-6">
         <div className="relative flex items-center justify-center">
-          {/* Phase 1 (0.0s - 1.4s): Geometric 'A' SVG emblem draws in exact center */}
+          {/* Phase 1 (0.0s - 1.15s): Geometric 'A' SVG emblem draws in exact center */}
           <motion.div
             initial={{ scale: 0.96 }}
             animate={{ scale: 1 }}
-            transition={{ duration: 1.1, ease: [0.22, 1, 0.36, 1] }}
+            transition={{ duration: 0.92, ease: [0.22, 1, 0.36, 1] }}
             className="relative shrink-0"
           >
             <svg
@@ -140,7 +135,7 @@ export function IntroSplash({
               <motion.g
                 initial={{ opacity: 1 }}
                 animate={{ opacity: 0.14 }}
-                transition={{ delay: 1.05, duration: 0.38, ease: 'easeOut' }}
+                transition={{ delay: 0.88, duration: 0.32, ease: 'easeOut' }}
                 style={{
                   filter:
                     'drop-shadow(0 0 12px rgba(253, 230, 138, 0.72)) drop-shadow(0 0 28px rgba(245, 158, 11, 0.45))',
@@ -154,7 +149,7 @@ export function IntroSplash({
                   initial={{ pathLength: 0, opacity: 0.4 }}
                   animate={{ pathLength: 1, opacity: 1 }}
                   transition={{
-                    duration: 0.96,
+                    duration: 0.82,
                     ease: [0.22, 1, 0.36, 1],
                   }}
                 />
@@ -166,8 +161,8 @@ export function IntroSplash({
                   initial={{ pathLength: 0, opacity: 0 }}
                   animate={{ pathLength: 1, opacity: 1 }}
                   transition={{
-                    delay: 0.2,
-                    duration: 0.84,
+                    delay: 0.16,
+                    duration: 0.72,
                     ease: [0.22, 1, 0.36, 1],
                   }}
                 />
@@ -180,20 +175,20 @@ export function IntroSplash({
                   initial={{ pathLength: 0, opacity: 0, scale: 0.7 }}
                   animate={{ pathLength: 1, opacity: 1, scale: 1 }}
                   transition={{
-                    delay: 0.64,
-                    duration: 0.48,
+                    delay: 0.54,
+                    duration: 0.42,
                     ease: [0.22, 1, 0.36, 1],
                   }}
                 />
               </motion.g>
 
-              {/* Completed brand gradient emblem fading in smoothly by 1.4s */}
+              {/* Completed brand gradient emblem fading in smoothly by 1.15s */}
               <motion.g
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 transition={{
-                  delay: 0.98,
-                  duration: 0.42,
+                  delay: 0.82,
+                  duration: 0.36,
                   ease: [0.22, 1, 0.36, 1],
                 }}
                 style={{
@@ -224,7 +219,7 @@ export function IntroSplash({
             </svg>
           </motion.div>
 
-          {/* Phase 2 (1.4s - 1.7s): Ultra-thin 1.5px vertical golden-white center light beam & outward portal wave */}
+          {/* Phase 2 (1.15s - 1.45s): Ultra-thin 1.5px vertical golden-white center light beam & outward portal wave */}
           <div
             aria-hidden="true"
             className="relative flex h-20 items-center justify-center sm:h-24"
@@ -237,8 +232,8 @@ export function IntroSplash({
                 opacity: [0, 0.98, 0.92, 0],
               }}
               transition={{
-                delay: 1.4,
-                duration: 1.4,
+                delay: 1.15,
+                duration: 1.15,
                 times: [0, 0.22, 0.72, 1],
                 ease: [0.22, 1, 0.36, 1],
               }}
@@ -259,8 +254,8 @@ export function IntroSplash({
                 opacity: [0, 0.55, 0],
               }}
               transition={{
-                delay: 1.68,
-                duration: 1.1,
+                delay: 1.38,
+                duration: 0.95,
                 times: [0, 0.35, 1],
                 ease: [0.22, 1, 0.36, 1],
               }}
@@ -272,13 +267,13 @@ export function IntroSplash({
             />
           </div>
 
-          {/* Phase 3 (1.7s - 2.8s): Symmetrical split as 'A' glides left and 't','r','i','u','m' emerge sequentially */}
+          {/* Phase 3 (1.4s - 2.3s): Symmetrical split as 'A' glides left and 't','r','i','u','m' emerge sequentially */}
           <motion.div
             initial={{ width: 0, opacity: 0 }}
             animate={{ width: 'auto', opacity: 1 }}
             transition={{
-              delay: 1.7,
-              duration: 0.9,
+              delay: 1.4,
+              duration: 0.72,
               ease: [0.22, 1, 0.36, 1],
             }}
             className="overflow-hidden"
@@ -298,8 +293,8 @@ export function IntroSplash({
                     backgroundPosition: '0% 50%',
                   }}
                   transition={{
-                    delay: 1.74 + idx * 0.095,
-                    duration: 0.58,
+                    delay: 1.44 + idx * 0.075,
+                    duration: 0.48,
                     ease: [0.22, 1, 0.36, 1],
                   }}
                   className="inline-block bg-clip-text font-display text-[44px] font-bold tracking-[-0.03em] text-transparent sm:text-[56px]"

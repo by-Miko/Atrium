@@ -23,6 +23,9 @@ const OUTER_ARCH_RTL =
 const INNER_ARCH_RTL =
   'M306 388V252C306 218.863 283.614 192 256 192C228.386 192 206 218.863 206 252V388';
 
+// Subtle ~2% SVG fractal film-grain data URL to eliminate 8-bit IPS gradient banding
+const FILM_GRAIN_SVG = `url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E")`;
+
 export function OutroSplash({
   sessionSavedLabel,
   craftedByLabel = 'Crafted by Miko',
@@ -62,24 +65,35 @@ export function OutroSplash({
       transition={{ duration: 0.42, ease: [0.22, 1, 0.36, 1] }}
       className="fixed inset-0 z-[100] flex flex-col items-center justify-center overflow-hidden px-6 text-center select-none"
       style={{
-        background:
-          'radial-gradient(circle at 50% 48%, #1C1635 0%, #0E0B1A 48%, #07060C 100%)',
+        backgroundColor: '#010205',
+        backgroundImage:
+          'radial-gradient(circle at 50% 48%, #070C18 0%, #03050B 45%, #010205 100%)',
       }}
     >
-      {/* Ambient radial glow dimming into serene standby */}
+      {/* Subtle 2% fine film-grain texture to eliminate 8-bit IPS gradient banding */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 z-0 opacity-[0.02]"
+        style={{
+          backgroundImage: FILM_GRAIN_SVG,
+          backgroundRepeat: 'repeat',
+        }}
+      />
+
+      {/* Focused deep-violet portal aura that preserves ink-deep obsidian edges */}
       <motion.div
         aria-hidden="true"
-        initial={{ opacity: 0.65, scale: 1.04 }}
+        initial={{ opacity: 0.72, scale: 1.04 }}
         animate={
           phase === 'standby'
-            ? { opacity: 0.22, scale: 0.92 }
-            : { opacity: [0.65, 0.45, 0.24], scale: [1.04, 0.98, 0.92] }
+            ? { opacity: 0.42, scale: 0.96 }
+            : { opacity: [0.72, 0.55, 0.42], scale: [1.04, 1, 0.96] }
         }
         transition={{ duration: 2.0, ease: [0.22, 1, 0.36, 1] }}
-        className="pointer-events-none absolute h-[460px] w-[460px] rounded-full blur-[95px]"
+        className="pointer-events-none absolute z-0 h-[340px] w-[340px] rounded-full blur-[80px]"
         style={{
           background:
-            'radial-gradient(circle, rgba(167,139,250,0.24) 0%, rgba(253,230,138,0.14) 38%, rgba(124,58,237,0.06) 65%, transparent 78%)',
+            'radial-gradient(circle, var(--theme-accent-soft, rgba(124,58,237,0.24)) 0%, rgba(67,56,202,0.08) 48%, transparent 74%)',
         }}
       />
 
@@ -312,37 +326,72 @@ export function OutroSplash({
             xmlns="http://www.w3.org/2000/svg"
             viewBox="118 94 276 322"
             fill="none"
-            className="mb-6 h-12 w-10 opacity-45"
+            className="mb-6 h-14 w-12 overflow-visible sm:h-16 sm:w-14"
+            style={{
+              filter:
+                'drop-shadow(0 0 16px rgba(167, 139, 250, 0.48)) drop-shadow(0 0 32px rgba(124, 58, 237, 0.26))',
+            }}
           >
+            <defs>
+              <linearGradient
+                id="standby-brand-arch"
+                x1="128"
+                y1="96"
+                x2="384"
+                y2="416"
+                gradientUnits="userSpaceOnUse"
+              >
+                <stop offset="0%" stopColor="#C4B5FD" />
+                <stop offset="100%" stopColor="#7C3AED" />
+              </linearGradient>
+              <linearGradient
+                id="standby-brand-core"
+                x1="234"
+                y1="266"
+                x2="278"
+                y2="310"
+                gradientUnits="userSpaceOnUse"
+              >
+                <stop offset="0%" stopColor="#EDE9FE" />
+                <stop offset="100%" stopColor="#A78BFA" />
+              </linearGradient>
+            </defs>
             <path
               d={OUTER_ARCH_RTL}
-              stroke="#C4B5FD"
+              stroke="url(#standby-brand-arch)"
               strokeWidth="34"
               strokeLinecap="round"
             />
             <path
               d={INNER_ARCH_RTL}
               stroke="#E9E4FA"
-              strokeOpacity="0.85"
+              strokeOpacity="0.92"
               strokeWidth="22"
               strokeLinecap="round"
             />
-            <circle cx="256" cy="288" r="22" fill="#A78BFA" />
+            <circle cx="256" cy="288" r="22" fill="url(#standby-brand-core)" />
           </svg>
 
-          <p className="text-sm font-medium tracking-wide text-white/75">
+          <p className="text-sm font-medium tracking-wide text-[#F1EEF9]/90">
             {sessionSavedLabel}
           </p>
 
           <button
             type="button"
             onClick={onReopen}
-            className="mt-6 inline-flex h-10 items-center justify-center rounded-full border border-white/15 bg-white/[0.08] px-6 text-sm font-medium text-white backdrop-blur-xl transition-all hover:border-[#FDE68A]/50 hover:bg-white/[0.14] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#A78BFA] whitespace-nowrap"
+            className="mt-6 inline-flex h-10 items-center justify-center rounded-full border border-white/[0.16] px-6 text-sm font-medium text-[#F1EEF9] transition-all hover:border-[var(--theme-accent)]/60 hover:bg-white/[0.08] hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-accent)] whitespace-nowrap"
+            style={{
+              background: 'var(--theme-stage-pill-bg, rgba(15, 23, 42, 0.42))',
+              backdropFilter: 'blur(20px) saturate(160%)',
+              WebkitBackdropFilter: 'blur(20px) saturate(160%)',
+              boxShadow:
+                'inset 0 1px 1px rgba(255, 255, 255, 0.18), 0 8px 28px rgba(0, 0, 0, 0.45), 0 0 24px var(--theme-accent-soft, rgba(124, 58, 237, 0.16))',
+            }}
           >
             {reopenLabel}
           </button>
 
-          <p className="mt-5 text-[10px] font-medium tracking-[0.18em] text-white/40 uppercase">
+          <p className="mt-5 text-[10px] font-medium tracking-[0.18em] text-[#FDE68A]/65 uppercase">
             {craftedByLabel}
           </p>
         </motion.div>

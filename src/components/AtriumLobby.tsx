@@ -94,16 +94,16 @@ function LobbyCharacterCard({
       }}
       transition={{
         duration: 0.45,
-        delay: introDone ? Math.min(index, 16) * 0.045 : 0,
+        delay: introDone && !hasEntered ? Math.min(index, 16) * 0.045 : 0,
         ease: [0.22, 1, 0.36, 1],
       }}
       style={{
         willChange: introDone && !hasEntered ? 'transform, opacity' : 'auto',
       }}
-      className={`group relative aspect-[2/3] overflow-hidden rounded-[26px] border bg-black/40 transition-all duration-300 ${
+      className={`group relative aspect-[2/3] overflow-hidden rounded-[26px] border bg-[var(--theme-glass)] backdrop-blur-md transition-all duration-700 ease-in-out ${
         isRecent
-          ? 'border-white/25 hover:border-amber-300/75 hover:shadow-[0_0_0_1px_rgba(253,230,138,0.35),0_20px_50px_rgba(245,158,11,0.16),0_18px_40px_rgba(0,0,0,0.65)]'
-          : 'border-white/12 hover:border-amber-300/70 hover:shadow-[0_0_0_1px_rgba(253,230,138,0.32),0_20px_50px_rgba(245,158,11,0.14),0_18px_40px_rgba(0,0,0,0.6)]'
+          ? 'border-white/20 hover:border-amber-300/75 hover:shadow-[0_0_0_1px_rgba(253,230,138,0.35),0_20px_50px_rgba(245,158,11,0.16),0_18px_40px_rgba(0,0,0,0.65)]'
+          : 'border-[rgba(255,255,255,0.12)] hover:border-amber-300/70 hover:shadow-[0_0_0_1px_rgba(253,230,138,0.32),0_20px_50px_rgba(245,158,11,0.14),0_18px_40px_rgba(0,0,0,0.6)]'
       }`}
     >
       {showImage ? (
@@ -290,54 +290,61 @@ export function AtriumLobby({
 
   return (
     <div
-      className="relative flex h-full w-full flex-col overflow-hidden"
+      className="relative flex h-full w-full flex-col overflow-hidden transition-colors duration-700 ease-in-out"
       style={{
-        background:
-          'radial-gradient(ellipse 80% 55% at 50% -10%, var(--theme-accent-soft), transparent 70%), var(--theme-bg)',
+        backgroundColor: 'var(--theme-bg)',
+        backgroundImage:
+          'radial-gradient(ellipse 80% 55% at 50% -10%, var(--theme-accent-soft), transparent 70%)',
       }}
     >
-      {/* Subtle Ambient Aurora Backdrop (14s slow breathing cycle) */}
+      {/* Dynamic Theme-Synced Liquid Glass Flow Background (14s–18s continuous swirl) */}
       <div
         aria-hidden="true"
         className="pointer-events-none absolute inset-0 z-0 overflow-hidden"
       >
-        <motion.div
-          animate={{
-            opacity: [0.35, 0.58, 0.35],
-            scale: [1, 1.07, 1],
-          }}
-          transition={{
-            duration: 14,
-            repeat: Infinity,
-            ease: 'easeInOut',
-          }}
-          className="absolute -top-36 -left-24 h-[520px] w-[520px] rounded-full blur-[140px]"
+        <div
+          className="absolute -top-32 -left-24 h-[620px] w-[620px] rounded-full blur-[110px] transition-colors duration-700 ease-in-out"
           style={{
-            background:
-              'radial-gradient(circle, rgba(99, 102, 241, 0.24) 0%, rgba(79, 70, 229, 0.08) 46%, transparent 74%)',
+            opacity: 0.34,
+            backgroundColor: 'var(--theme-orb-1, #6d28d9)',
+            maskImage:
+              'radial-gradient(circle, rgba(0,0,0,1) 0%, rgba(0,0,0,0.45) 44%, transparent 74%)',
+            WebkitMaskImage:
+              'radial-gradient(circle, rgba(0,0,0,1) 0%, rgba(0,0,0,0.45) 44%, transparent 74%)',
+            animation: 'liquidOrbDriftA 14s ease-in-out infinite',
+            willChange: 'transform, border-radius',
           }}
         />
-        <motion.div
-          animate={{
-            opacity: [0.28, 0.48, 0.28],
-            scale: [1.05, 0.98, 1.05],
-          }}
-          transition={{
-            duration: 14,
-            repeat: Infinity,
-            ease: 'easeInOut',
-            delay: 7,
-          }}
-          className="absolute right-[-8%] bottom-[-14%] h-[460px] w-[460px] rounded-full blur-[140px]"
+        <div
+          className="absolute top-[14%] right-[-10%] h-[600px] w-[600px] rounded-full blur-[110px] transition-colors duration-700 ease-in-out"
           style={{
-            background:
-              'radial-gradient(circle, rgba(245, 158, 11, 0.16) 0%, rgba(253, 230, 138, 0.06) 46%, transparent 74%)',
+            opacity: 0.32,
+            backgroundColor: 'var(--theme-orb-2, #4c1d95)',
+            maskImage:
+              'radial-gradient(circle, rgba(0,0,0,1) 0%, rgba(0,0,0,0.46) 46%, transparent 74%)',
+            WebkitMaskImage:
+              'radial-gradient(circle, rgba(0,0,0,1) 0%, rgba(0,0,0,0.46) 46%, transparent 74%)',
+            animation: 'liquidOrbDriftB 16s ease-in-out infinite',
+            willChange: 'transform, border-radius',
+          }}
+        />
+        <div
+          className="absolute -bottom-36 left-[24%] h-[640px] w-[640px] rounded-full blur-[110px] transition-colors duration-700 ease-in-out"
+          style={{
+            opacity: 0.3,
+            backgroundColor: 'var(--theme-orb-3, #1e1b4b)',
+            maskImage:
+              'radial-gradient(circle, rgba(0,0,0,1) 0%, rgba(0,0,0,0.44) 45%, transparent 75%)',
+            WebkitMaskImage:
+              'radial-gradient(circle, rgba(0,0,0,1) 0%, rgba(0,0,0,0.44) 45%, transparent 75%)',
+            animation: 'liquidOrbDriftC 18s ease-in-out infinite',
+            willChange: 'transform, border-radius',
           }}
         />
       </div>
 
       {/* Top Spatial Header */}
-      <header className="relative z-20 shrink-0 border-b border-white/10 bg-black/25 backdrop-blur-2xl">
+      <header className="relative z-20 shrink-0 border-b border-[rgba(255,255,255,0.12)] bg-[var(--theme-glass)] backdrop-blur-2xl transition-colors duration-700 ease-in-out">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-5 py-3.5 sm:px-8">
           {/* Left: Living Atrium Logo Mark + Wordmark */}
           <div className="flex items-center gap-2.5 shrink-0">
@@ -425,9 +432,9 @@ export function AtriumLobby({
                 title={
                   selectedModel.trim() ? t.apiStatusReady : t.apiStatusSetup
                 }
-                className={`inline-flex h-9 items-center gap-2 rounded-full border px-3 text-xs font-medium shadow-[inset_1px_1px_0_rgba(255,255,255,0.2)] backdrop-blur-xl transition-all focus-visible:outline-2 focus-visible:outline-[var(--theme-accent)] whitespace-nowrap shrink-0 ${
+                className={`inline-flex h-9 items-center gap-2 rounded-full border px-3 text-xs font-medium shadow-[inset_1px_1px_0_rgba(255,255,255,0.16)] backdrop-blur-xl transition-all duration-700 ease-in-out focus-visible:outline-2 focus-visible:outline-[var(--theme-accent)] whitespace-nowrap shrink-0 ${
                   selectedModel.trim()
-                    ? 'border-white/14 bg-white/[0.06] text-white/90 hover:border-emerald-300/40 hover:bg-white/[0.12]'
+                    ? 'border-[rgba(255,255,255,0.12)] bg-[var(--theme-glass)] text-white/90 hover:border-emerald-300/40 hover:bg-[var(--theme-glass-hover)]'
                     : 'border-amber-300/35 bg-amber-500/[0.12] text-amber-100 hover:border-amber-300/65 hover:bg-amber-500/[0.2]'
                 }`}
               >
@@ -456,12 +463,12 @@ export function AtriumLobby({
                       ? t.ollamaStatusReady
                       : t.ollamaStatusChecking
                 }
-                className={`inline-flex h-9 items-center gap-2 rounded-full border px-3 text-xs font-medium shadow-[inset_1px_1px_0_rgba(255,255,255,0.2)] backdrop-blur-xl transition-all focus-visible:outline-2 focus-visible:outline-[var(--theme-accent)] whitespace-nowrap shrink-0 ${
+                className={`inline-flex h-9 items-center gap-2 rounded-full border px-3 text-xs font-medium shadow-[inset_1px_1px_0_rgba(255,255,255,0.16)] backdrop-blur-xl transition-colors duration-700 ease-in-out focus-visible:outline-2 focus-visible:outline-[var(--theme-accent)] whitespace-nowrap shrink-0 ${
                   ollamaStatus === 'offline'
                     ? 'border-amber-300/35 bg-amber-500/[0.12] text-amber-100 hover:border-amber-300/65 hover:bg-amber-500/[0.2]'
                     : ollamaStatus === 'connected'
-                      ? 'border-white/14 bg-white/[0.06] text-white/90 hover:border-emerald-300/40 hover:bg-white/[0.12]'
-                      : 'border-white/12 bg-white/[0.05] text-white/75 hover:bg-white/[0.1]'
+                      ? 'border-[rgba(255,255,255,0.12)] bg-[var(--theme-glass)] text-white/90 hover:border-emerald-300/40 hover:bg-[var(--theme-glass-hover)]'
+                      : 'border-[rgba(255,255,255,0.12)] bg-[var(--theme-glass)] text-white/75 hover:bg-[var(--theme-glass-hover)]'
                 }`}
               >
                 <span
@@ -490,10 +497,10 @@ export function AtriumLobby({
               type="button"
               onClick={onOpenUserPersona}
               title={t.userPersonaTooltip}
-              className={`inline-flex h-9 items-center gap-1.5 rounded-full border px-3.5 text-xs font-medium shadow-[inset_1px_1px_0_rgba(255,255,255,0.2)] backdrop-blur-xl transition-colors focus-visible:outline-2 focus-visible:outline-[var(--theme-accent)] whitespace-nowrap shrink-0 ${
+              className={`inline-flex h-9 items-center gap-1.5 rounded-full border px-3.5 text-xs font-medium shadow-[inset_1px_1px_0_rgba(255,255,255,0.16)] backdrop-blur-xl transition-colors duration-700 ease-in-out focus-visible:outline-2 focus-visible:outline-[var(--theme-accent)] whitespace-nowrap shrink-0 ${
                 hasPersonaName
                   ? 'border-[var(--theme-accent)]/45 bg-[var(--theme-accent-soft)] text-white hover:border-[var(--theme-accent)]'
-                  : 'border-white/12 bg-white/[0.06] text-white/85 hover:bg-white/[0.12] hover:text-white'
+                  : 'border-[rgba(255,255,255,0.12)] bg-[var(--theme-glass)] text-white/85 hover:bg-[var(--theme-glass-hover)] hover:text-white'
               }`}
             >
               <User className="h-3.5 w-3.5 text-[var(--theme-accent)]" />
@@ -505,7 +512,7 @@ export function AtriumLobby({
             <button
               type="button"
               onClick={onOpenSettings}
-              className="inline-flex h-9 items-center gap-1.5 rounded-full border border-white/12 bg-white/[0.06] px-3.5 text-xs font-medium text-white/90 shadow-[inset_1px_1px_0_rgba(255,255,255,0.2)] backdrop-blur-xl transition-colors hover:bg-white/[0.12] hover:text-white focus-visible:outline-2 focus-visible:outline-[var(--theme-accent)] whitespace-nowrap shrink-0"
+              className="inline-flex h-9 items-center gap-1.5 rounded-full border border-[rgba(255,255,255,0.12)] bg-[var(--theme-glass)] px-3.5 text-xs font-medium text-white/90 shadow-[inset_1px_1px_0_rgba(255,255,255,0.16)] backdrop-blur-xl transition-colors duration-700 ease-in-out hover:bg-[var(--theme-glass-hover)] hover:text-white focus-visible:outline-2 focus-visible:outline-[var(--theme-accent)] whitespace-nowrap shrink-0"
             >
               <Settings className="h-3.5 w-3.5 text-[var(--theme-accent)]" />
               <span className="hidden sm:inline">{t.settingsButton}</span>
@@ -514,7 +521,7 @@ export function AtriumLobby({
             <button
               type="button"
               onClick={onExit}
-              className="inline-flex h-9 items-center gap-1.5 rounded-full border border-white/12 bg-white/[0.04] px-3.5 text-xs font-medium text-white/75 shadow-[inset_1px_1px_0_rgba(255,255,255,0.16)] backdrop-blur-xl transition-colors hover:border-white/25 hover:bg-white/[0.1] hover:text-white focus-visible:outline-2 focus-visible:outline-[var(--theme-accent)] whitespace-nowrap shrink-0"
+              className="inline-flex h-9 items-center gap-1.5 rounded-full border border-[rgba(255,255,255,0.12)] bg-[var(--theme-glass)] px-3.5 text-xs font-medium text-white/75 shadow-[inset_1px_1px_0_rgba(255,255,255,0.14)] backdrop-blur-xl transition-colors duration-700 ease-in-out hover:border-white/25 hover:bg-[var(--theme-glass-hover)] hover:text-white focus-visible:outline-2 focus-visible:outline-[var(--theme-accent)] whitespace-nowrap shrink-0"
             >
               <LogOut className="h-3.5 w-3.5" />
               <span className="hidden sm:inline">{t.lobbyExitButton}</span>
@@ -555,7 +562,7 @@ export function AtriumLobby({
               <button
                 type="button"
                 onClick={() => pngInputRef.current?.click()}
-                className="inline-flex h-10 items-center gap-2 rounded-full border border-white/14 bg-white/[0.06] px-4 text-xs font-semibold text-white shadow-[inset_1px_1px_0_rgba(255,255,255,0.2)] backdrop-blur-xl transition-colors hover:border-amber-300/45 hover:bg-white/[0.11] focus-visible:outline-2 focus-visible:outline-[var(--theme-accent)] whitespace-nowrap shrink-0"
+                className="inline-flex h-10 items-center gap-2 rounded-full border border-[rgba(255,255,255,0.12)] bg-[var(--theme-glass)] px-4 text-xs font-semibold text-white shadow-[inset_1px_1px_0_rgba(255,255,255,0.16)] backdrop-blur-md transition-colors duration-700 ease-in-out hover:border-amber-300/45 hover:bg-[var(--theme-glass-hover)] focus-visible:outline-2 focus-visible:outline-[var(--theme-accent)] whitespace-nowrap shrink-0"
               >
                 <FileImage className="h-3.5 w-3.5 text-[var(--theme-accent)]" />
                 <span>{t.importCharacterCardShort}</span>
@@ -564,7 +571,7 @@ export function AtriumLobby({
               <button
                 type="button"
                 onClick={onCreateCharacter}
-                className="inline-flex h-10 items-center gap-2 rounded-full px-5 text-xs font-semibold shadow-lg transition-transform hover:scale-[1.02] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-accent)] whitespace-nowrap shrink-0"
+                className="inline-flex h-10 items-center gap-2 rounded-full px-5 text-xs font-semibold shadow-lg transition-all duration-300 hover:scale-[1.02] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-accent)] whitespace-nowrap shrink-0"
                 style={{
                   backgroundColor: 'var(--theme-accent)',
                   color: 'var(--theme-on-accent)',
@@ -606,7 +613,7 @@ export function AtriumLobby({
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder={t.searchPlaceholder}
                 aria-label={t.searchPlaceholder}
-                className="h-10 w-full rounded-full border border-white/12 bg-white/[0.04] pr-4 pl-10 text-sm text-white placeholder-[var(--theme-muted)]/70 backdrop-blur-xl transition-colors focus:border-[var(--theme-accent)] focus:outline-none"
+                className="h-10 w-full rounded-full border border-[rgba(255,255,255,0.12)] bg-[var(--theme-glass)] pr-4 pl-10 text-sm text-white placeholder-[var(--theme-muted)]/70 shadow-[inset_0_1px_0_rgba(255,255,255,0.12)] backdrop-blur-md transition-colors duration-700 ease-in-out focus:border-[var(--theme-accent)] focus:outline-none"
               />
             </label>
 
@@ -620,10 +627,10 @@ export function AtriumLobby({
                       key={tag}
                       type="button"
                       onClick={() => setActiveTag(tag)}
-                      className={`rounded-xl px-3 py-1.5 text-xs font-medium transition-colors whitespace-nowrap shrink-0 ${
+                      className={`rounded-xl border px-3 py-1.5 text-xs font-medium backdrop-blur-md transition-colors duration-700 ease-in-out whitespace-nowrap shrink-0 ${
                         selected
-                          ? 'bg-[var(--theme-accent-soft)] text-[var(--theme-accent)]'
-                          : 'text-[var(--theme-muted)] hover:bg-white/[0.06] hover:text-white'
+                          ? 'border-[var(--theme-accent)]/45 bg-[var(--theme-accent-soft)] text-[var(--theme-accent)] shadow-[inset_0_1px_0_rgba(255,255,255,0.16)]'
+                          : 'border-[rgba(255,255,255,0.12)] bg-[var(--theme-glass)] text-[var(--theme-muted)] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] hover:bg-[var(--theme-glass-hover)] hover:text-white'
                       }`}
                     >
                       {label}
@@ -636,7 +643,7 @@ export function AtriumLobby({
 
           {/* Cinematic Character Card Grid */}
           {filteredCharacters.length === 0 ? (
-            <div className="mt-8 flex flex-col items-center justify-center rounded-[28px] border border-white/10 bg-white/[0.03] px-6 py-16 text-center backdrop-blur-xl">
+            <div className="mt-8 flex flex-col items-center justify-center rounded-[28px] border border-[rgba(255,255,255,0.12)] bg-[var(--theme-glass)] px-6 py-16 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.12)] backdrop-blur-xl transition-colors duration-700 ease-in-out">
               <LayoutGrid className="mb-3 h-8 w-8 text-[var(--theme-muted)]" />
               <p className="text-base font-medium text-white">
                 {t.noMatchingTitle}

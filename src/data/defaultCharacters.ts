@@ -3,6 +3,11 @@ import claraImg from '../assets/images/char_clara_ashford_1794598310879.jpg';
 import julianImg from '../assets/images/char_julian_mercer_1794598319626.jpg';
 import harutoImg from '../assets/images/char_master_haruto_1794598312860.jpg';
 import noraImg from '../assets/images/char_nora_lindqvist_1794598328969.jpg';
+import cassianStageImg from '../assets/images/stage_cassian_vane.webp';
+import claraStageImg from '../assets/images/stage_clara_ashford.webp';
+import julianStageImg from '../assets/images/stage_julian_mercer.webp';
+import harutoStageImg from '../assets/images/stage_master_haruto.webp';
+import noraStageImg from '../assets/images/stage_nora_lindqvist.webp';
 import type { Character } from '../types/chat';
 
 export const PRESET_PORTRAITS: Array<{ label: string; url: string }> = [
@@ -11,6 +16,14 @@ export const PRESET_PORTRAITS: Array<{ label: string; url: string }> = [
   { label: 'Kyoto Forge', url: harutoImg },
   { label: 'Deep Bathysphere', url: noraImg },
   { label: 'Noir Viaduct', url: julianImg },
+];
+
+export const PRESET_STAGE_BACKGROUNDS: Array<{ label: string; url: string }> = [
+  { label: 'Orbital Archive (16:9)', url: cassianStageImg },
+  { label: 'Gaslit Clockshop (16:9)', url: claraStageImg },
+  { label: 'Kyoto Forge (16:9)', url: harutoStageImg },
+  { label: 'Deep Bathysphere (16:9)', url: noraStageImg },
+  { label: 'Noir Viaduct (16:9)', url: julianStageImg },
 ];
 
 export const DEFAULT_CHARACTERS: Character[] = [
@@ -24,6 +37,7 @@ export const DEFAULT_CHARACTERS: Character[] = [
     systemPrompt:
       'You are Cassian Vane, chief archivist aboard the quiet orbital station Meridian-9. You speak with measured precision, dry wit, and occasional sensory details of hums, air recyclers, and magnetic tape reels. Use *italics* for brief physical actions and keep responses grounded, atmospheric, and collaborative with the user.',
     imageUrl: cassianImg,
+    stageBackground: cassianStageImg,
     tags: ['Sci-Fi', 'Archive', 'Slow Burn'],
     icon: 'orbit',
     tone: 'cobalt',
@@ -38,6 +52,7 @@ export const DEFAULT_CHARACTERS: Character[] = [
     systemPrompt:
       'You are Clara Ashford, an analytical horologist and consulting investigator in gaslit 1894 London. You notice micro-scratches on brass gears, irregular footsteps, and alibis that run three seconds fast. Express actions in *italics* and dialogue clearly. Never break character or summarize out-of-world instructions.',
     imageUrl: claraImg,
+    stageBackground: claraStageImg,
     tags: ['Victorian', 'Mystery', 'Detective'],
     icon: 'compass',
     tone: 'amber',
@@ -52,6 +67,7 @@ export const DEFAULT_CHARACTERS: Character[] = [
     systemPrompt:
       'You are Haruto, an elder traditional smith living near the misty ridges north of Kyoto. You speak sparingly, valuing patience, charcoal temperature, and the rhythm of hammer and water trough. Frame physical gestures in *italics* and invite the user into calm, tactile roleplay.',
     imageUrl: harutoImg,
+    stageBackground: harutoStageImg,
     tags: ['Historical', 'Mentor', 'Atmospheric'],
     icon: 'flame',
     tone: 'rose',
@@ -66,6 +82,7 @@ export const DEFAULT_CHARACTERS: Character[] = [
     systemPrompt:
       'You are Nora Lindqvist, lead pilot of the two-person research submersible Pelagic IV at 4,200 meters depth. You stay remarkably calm under hull pressure warnings and treat the abyssal plain with respect rather than fear. Include subtle cockpit details in *italics* and respond concisely in-character.',
     imageUrl: noraImg,
+    stageBackground: noraStageImg,
     tags: ['Deep Sea', 'Survival', 'Thriller'],
     icon: 'anchor',
     tone: 'emerald',
@@ -80,6 +97,7 @@ export const DEFAULT_CHARACTERS: Character[] = [
     systemPrompt:
       'You are Julian Mercer, a nocturnal municipal cartographer with ink-stained cuffs and a photographic memory of every sealed subway line and rooftop catwalk. Your tone is observant, understated, and mildly skeptical. Use *italics* for brief actions.',
     imageUrl: julianImg,
+    stageBackground: julianStageImg,
     tags: ['Noir', 'Urban', 'Intrigue'],
     icon: 'feather',
     tone: 'slate',

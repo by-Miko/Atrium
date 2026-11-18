@@ -8,7 +8,10 @@ import {
   X,
 } from 'lucide-react';
 import { useEffect, useState, type ChangeEvent, type FormEvent } from 'react';
-import { PRESET_PORTRAITS } from '../data/defaultCharacters';
+import {
+  PRESET_PORTRAITS,
+  PRESET_STAGE_BACKGROUNDS,
+} from '../data/defaultCharacters';
 import type { UIStrings } from '../i18n/translations';
 import type { Character, CharacterIconId, CharacterTone } from '../types/chat';
 import { readImageFileAsDataUrl } from '../utils/imageUpload';
@@ -43,7 +46,7 @@ export function CharacterModal({
   const [bio, setBio] = useState('');
   const [tagsInput, setTagsInput] = useState('');
   const [imageUrl, setImageUrl] = useState('');
-  const [wallpaperUrl, setWallpaperUrl] = useState('');
+  const [stageBackground, setStageBackground] = useState('');
   const [greeting, setGreeting] = useState('');
   const [systemPrompt, setSystemPrompt] = useState('');
   const [icon, setIcon] = useState<CharacterIconId>('orbit');
@@ -61,7 +64,9 @@ export function CharacterModal({
       setBio(editingCharacter.bio);
       setTagsInput(editingCharacter.tags.join(', '));
       setImageUrl(editingCharacter.imageUrl ?? '');
-      setWallpaperUrl(editingCharacter.wallpaperUrl ?? '');
+      setStageBackground(
+        editingCharacter.stageBackground ?? editingCharacter.wallpaperUrl ?? ''
+      );
       setGreeting(editingCharacter.greeting ?? '');
       setSystemPrompt(editingCharacter.systemPrompt);
       setIcon(editingCharacter.icon);
@@ -72,7 +77,7 @@ export function CharacterModal({
       setBio('');
       setTagsInput('Roleplay, Mystery');
       setImageUrl(PRESET_PORTRAITS[0]?.url ?? '');
-      setWallpaperUrl('');
+      setStageBackground('');
       setGreeting(
         '*Glances up as the door clicks shut behind you.* You’re just in time—take a seat and tell me what brings you here.'
       );
@@ -112,17 +117,21 @@ export function CharacterModal({
     }
   };
 
-  const handleWallpaperUpload = async (e: ChangeEvent<HTMLInputElement>) => {
+  const handleStageBackgroundUpload = async (
+    e: ChangeEvent<HTMLInputElement>
+  ) => {
     const file = e.target.files?.[0];
     e.target.value = '';
     if (!file) return;
     try {
       setUploadError(null);
       const dataUrl = await readImageFileAsDataUrl(file, 1280, 0.85);
-      setWallpaperUrl(dataUrl);
+      setStageBackground(dataUrl);
     } catch (err) {
       setUploadError(
-        err instanceof Error ? err.message : 'Failed to upload wallpaper image.'
+        err instanceof Error
+          ? err.message
+          : 'Failed to upload stage wallpaper image.'
       );
     }
   };
@@ -174,7 +183,8 @@ export function CharacterModal({
         `*${name.trim()} greets you quietly.* What would you like to begin with?`,
       tags,
       imageUrl: imageUrl.trim() || undefined,
-      wallpaperUrl: wallpaperUrl.trim() || undefined,
+      stageBackground: stageBackground.trim() || undefined,
+      wallpaperUrl: undefined,
       systemPrompt: systemPrompt.trim(),
       icon,
       tone,
@@ -400,10 +410,10 @@ export function CharacterModal({
                 <span className="text-xs font-medium text-white">
                   {t.wallpaperImageLabel}
                 </span>
-                {wallpaperUrl ? (
+                {stageBackground ? (
                   <button
                     type="button"
-                    onClick={() => setWallpaperUrl('')}
+                    onClick={() => setStageBackground('')}
                     className="text-[11px] text-[var(--theme-muted)] hover:text-white"
                   >
                     {t.useAvatar}
@@ -412,13 +422,13 @@ export function CharacterModal({
               </div>
 
               <div className="flex items-center gap-3">
-                <div className="h-16 w-12 shrink-0 overflow-hidden rounded-xl border border-white/15 bg-black/50">
-                  {wallpaperUrl || imageUrl ? (
+                <div className="h-14 w-24 shrink-0 overflow-hidden rounded-xl border border-white/15 bg-black/50">
+                  {stageBackground || imageUrl ? (
                     <img
-                      src={wallpaperUrl || imageUrl}
+                      src={stageBackground || imageUrl}
                       alt={t.wallpaperImageLabel}
                       referrerPolicy="no-referrer"
-                      className="h-full w-full object-cover opacity-80"
+                      className="h-full w-full object-cover opacity-85"
                     />
                   ) : (
                     <div className="flex h-full w-full items-center justify-center text-white/40">
@@ -434,16 +444,18 @@ export function CharacterModal({
                     <input
                       type="file"
                       accept="image/*"
-                      onChange={handleWallpaperUpload}
+                      onChange={handleStageBackgroundUpload}
                       className="sr-only"
                     />
                   </label>
                   <input
                     type="url"
-                    value={wallpaperUrl.startsWith('data:') ? '' : wallpaperUrl}
-                    onChange={(e) => setWallpaperUrl(e.target.value)}
+                    value={
+                      stageBackground.startsWith('data:') ? '' : stageBackground
+                    }
+                    onChange={(e) => setStageBackground(e.target.value)}
                     placeholder={
-                      wallpaperUrl.startsWith('data:')
+                      stageBackground.startsWith('data:')
                         ? t.localWallpaperSaved
                         : t.wallpaperUrlPlaceholder
                     }
@@ -454,14 +466,14 @@ export function CharacterModal({
               </div>
 
               <div className="mt-2.5 flex flex-wrap gap-1.5">
-                {PRESET_PORTRAITS.map((preset) => (
+                {PRESET_STAGE_BACKGROUNDS.map((preset) => (
                   <button
-                    key={`wall-${preset.label}`}
+                    key={`stage-${preset.label}`}
                     type="button"
-                    onClick={() => setWallpaperUrl(preset.url)}
+                    onClick={() => setStageBackground(preset.url)}
                     title={preset.label}
-                    className={`h-8 w-6 overflow-hidden rounded-md border transition-all ${
-                      wallpaperUrl === preset.url
+                    className={`h-6 w-10 overflow-hidden rounded-md border transition-all ${
+                      stageBackground === preset.url
                         ? 'border-[var(--theme-accent)] ring-1 ring-[var(--theme-accent)]'
                         : 'border-white/15 opacity-70 hover:opacity-100'
                     }`}

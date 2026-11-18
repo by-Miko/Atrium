@@ -255,6 +255,7 @@ export function hydrateCharacters(saved: Character[] | undefined): Character[] {
     return {
       ...char,
       imageUrl: char.imageUrl || fallback?.imageUrl,
+      stageBackground: char.stageBackground || fallback?.stageBackground,
       wallpaperUrl: char.wallpaperUrl || fallback?.wallpaperUrl,
       greeting:
         char.greeting ||

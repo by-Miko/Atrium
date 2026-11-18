@@ -51,16 +51,17 @@ export function CharacterProfileModal({
   }, [character, onClose]);
 
   const hasPortrait = Boolean(character?.imageUrl);
+  const stageArt = character?.stageBackground || character?.wallpaperUrl;
   const hasSeparateWallpaper = Boolean(
-    character?.wallpaperUrl && character.wallpaperUrl !== character.imageUrl
+    stageArt && stageArt !== character?.imageUrl
   );
 
   const displayedArtwork =
     character === null
       ? ''
-      : artVariant === 'wallpaper' && character.wallpaperUrl
-        ? character.wallpaperUrl
-        : character.imageUrl || character.wallpaperUrl || '';
+      : artVariant === 'wallpaper' && stageArt
+        ? stageArt
+        : character.imageUrl || stageArt || '';
 
   return (
     <AnimatePresence>

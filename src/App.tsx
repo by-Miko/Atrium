@@ -9,6 +9,7 @@ import { AtriumLobby } from './components/AtriumLobby';
 import { CharacterModal } from './components/CharacterModal';
 import { CharacterProfileModal } from './components/CharacterProfileModal';
 import { ChatWindow } from './components/ChatWindow';
+import { GrandIntroSplash } from './components/GrandIntroSplash';
 import { ImageLightbox } from './components/ImageLightbox';
 import { IntroSplash } from './components/IntroSplash';
 import { OfflineIndicator } from './components/OfflineIndicator';
@@ -137,6 +138,25 @@ function makeMessageId(): string {
   return `msg-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
+const GRAND_INTRO_STORAGE_KEY = 'atrium_grand_intro_last_played_at';
+const GRAND_INTRO_INTERVAL_MS = 12 * 60 * 60 * 1000;
+
+function resolveInitialIntroMode(): 'grand' | 'quick' {
+  try {
+    const raw = window.localStorage.getItem(GRAND_INTRO_STORAGE_KEY);
+    if (!raw) return 'grand';
+    const lastPlayedAt = Number(raw);
+    if (!Number.isFinite(lastPlayedAt) || lastPlayedAt <= 0) {
+      return 'grand';
+    }
+    return Date.now() - lastPlayedAt >= GRAND_INTRO_INTERVAL_MS
+      ? 'grand'
+      : 'quick';
+  } catch {
+    return 'grand';
+  }
+}
+
 export default function App() {
   const [characters, setCharacters] = useState<Character[]>(DEFAULT_CHARACTERS);
   const [activeCharacterId, setActiveCharacterId] = useState<string>(
@@ -164,8 +184,6 @@ export default function App() {
   );
   const [isStorageReady, setIsStorageReady] = useState(false);
 
-  const t = TRANSLATIONS[language];
-
   const [activeWorld, setActiveWorld] = useState<'lobby' | 'chat'>('lobby');
   const [showOutro, setShowOutro] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -187,13 +205,18 @@ export default function App() {
     string | null
   >(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [showIntro, setShowIntro] = useState(true);
+  const [introMode, setIntroMode] = useState<'grand' | 'quick' | null>(() =>
+    resolveInitialIntroMode()
+  );
+  const showIntro = introMode !== null;
   const [lobbyWillChange, setLobbyWillChange] = useState(true);
   const [ollamaStatus, setOllamaStatus] = useState<
     'checking' | 'connected' | 'offline'
   >('checking');
   const [showOllamaSetupHelper, setShowOllamaSetupHelper] = useState(false);
   const [isStoryMemoryOpen, setIsStoryMemoryOpen] = useState(false);
+
+  const t = TRANSLATIONS[language];
 
   const abortControllerRef = useRef<AbortController | null>(null);
   const conversationsRef = useRef(conversations);
@@ -202,8 +225,27 @@ export default function App() {
   storyMemoriesRef.current = storyMemories;
   const summarizingCharIdsRef = useRef<Set<string>>(new Set());
   const lastSummaryAttemptCountRef = useRef<Record<string, number>>({});
+
+  useEffect(() => {
+    if (introMode === 'grand') {
+      try {
+        window.localStorage.setItem(
+          GRAND_INTRO_STORAGE_KEY,
+          String(Date.now())
+        );
+      } catch {
+        // Ignore storage write errors in restricted contexts
+      }
+    }
+  }, [introMode]);
+
   const handleIntroComplete = useCallback(() => {
-    setShowIntro(false);
+    setIntroMode(null);
+  }, []);
+
+  const handleReplayGrandIntro = useCallback(() => {
+    setIsSettingsOpen(false);
+    setIntroMode('grand');
   }, []);
 
   const activeCharacter = useMemo(
@@ -224,9 +266,17 @@ export default function App() {
     return counts;
   }, [conversations]);
 
+  const stopStreaming = useCallback(() => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    setStreamingCharacterId(null);
+  }, []);
+
   const themeStyle = useMemo(
     () => getThemeCssVariables(themeId, bubbleSchemeId, visualSettings),
-    [themeId, bubbleSchemeId, visualSettings]
+    [bubbleSchemeId, themeId, visualSettings]
   );
 
   useEffect(() => {
@@ -325,23 +375,23 @@ export default function App() {
   useEffect(() => {
     if (!isStorageReady) return;
     void idbSet(STORAGE_KEYS.storyMemories, storyMemories);
-  }, [storyMemories, isStorageReady]);
+  }, [isStorageReady, storyMemories]);
 
   useEffect(() => {
     if (!isStorageReady) return;
     void idbSet(STORAGE_KEYS.settings, stripSecretFromSettings(settings));
     void saveApiKeySecurely(settings.apiKey ?? '');
-  }, [settings, isStorageReady]);
+  }, [isStorageReady, settings]);
 
   useEffect(() => {
     if (!isStorageReady) return;
     void idbSet(STORAGE_KEYS.userPersona, userPersona);
-  }, [userPersona, isStorageReady]);
+  }, [isStorageReady, userPersona]);
 
   useEffect(() => {
     if (!isStorageReady) return;
     void idbSet(STORAGE_KEYS.theme, themeId);
-  }, [themeId, isStorageReady]);
+  }, [isStorageReady, themeId]);
 
   useEffect(() => {
     if (!isStorageReady) return;
@@ -351,30 +401,22 @@ export default function App() {
   useEffect(() => {
     if (!isStorageReady) return;
     void idbSet(STORAGE_KEYS.language, language);
-  }, [language, isStorageReady]);
+  }, [isStorageReady, language]);
 
   useEffect(() => {
     if (!isStorageReady) return;
     void idbSet(STORAGE_KEYS.wallpaperFit, wallpaperFit);
-  }, [wallpaperFit, isStorageReady]);
+  }, [isStorageReady, wallpaperFit]);
 
   useEffect(() => {
     if (!isStorageReady) return;
     void idbSet(STORAGE_KEYS.parallaxEnabled, parallaxEnabled);
-  }, [parallaxEnabled, isStorageReady]);
+  }, [isStorageReady, parallaxEnabled]);
 
   useEffect(() => {
     if (!isStorageReady) return;
     void idbSet(STORAGE_KEYS.visualSettings, visualSettings);
-  }, [visualSettings, isStorageReady]);
-
-  const stopStreaming = useCallback(() => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-      abortControllerRef.current = null;
-    }
-    setStreamingCharacterId(null);
-  }, []);
+  }, [isStorageReady, visualSettings]);
 
   const streamAssistantReply = useCallback(
     async (targetCharacter: Character, baseHistory: ChatMessage[]) => {
@@ -1505,29 +1547,36 @@ export default function App() {
     <MotionConfig reducedMotion="user">
       <div
         style={themeStyle}
-        className="flex h-dvh w-full overflow-hidden bg-[var(--theme-bg)] text-[var(--theme-text)] transition-colors duration-300"
+        className="m-0 flex h-dvh w-screen overflow-hidden bg-[var(--theme-bg)] p-0 text-[var(--theme-text)] transition-colors duration-300"
       >
         <AnimatePresence mode="wait">
           {activeWorld === 'lobby' ? (
             <motion.div
               key="world-lobby"
               initial={
-                showIntro
+                introMode === 'quick'
                   ? {
                       opacity: 0.35,
-                      transform: 'translate3d(0, 10px, 0) scale3d(0.98, 0.98, 1)',
-                    }
-                  : {
-                      opacity: 0,
                       transform:
-                        'translate3d(0, 0, 0) scale3d(0.985, 0.985, 1)',
+                        'translate3d(0, 10px, 0) scale3d(0.98, 0.98, 1)',
                     }
+                  : introMode === 'grand'
+                    ? {
+                        opacity: 1,
+                        transform: 'translate3d(0, 0, 0) scale3d(1, 1, 1)',
+                      }
+                    : {
+                        opacity: 0,
+                        transform:
+                          'translate3d(0, 0, 0) scale3d(0.985, 0.985, 1)',
+                      }
               }
               animate={
-                showIntro
+                introMode === 'quick'
                   ? {
                       opacity: 0.35,
-                      transform: 'translate3d(0, 10px, 0) scale3d(0.98, 0.98, 1)',
+                      transform:
+                        'translate3d(0, 10px, 0) scale3d(0.98, 0.98, 1)',
                     }
                   : {
                       opacity: 1,
@@ -1545,11 +1594,15 @@ export default function App() {
                 }
               }}
               transition={{
-                duration: showIntro ? 0.34 : 0.55,
+                duration: introMode === 'quick' ? 0.34 : 0.55,
                 ease: [0.22, 1, 0.36, 1],
               }}
               style={{
-                willChange: lobbyWillChange ? 'transform, opacity' : 'auto',
+                willChange:
+                  lobbyWillChange && introMode !== 'grand'
+                    ? 'transform, opacity'
+                    : 'auto',
+                pointerEvents: showIntro ? 'none' : 'auto',
               }}
               className="h-full w-full"
             >
@@ -1560,7 +1613,7 @@ export default function App() {
                 selectedModel={settings.selectedModel}
                 provider={settings.provider ?? 'ollama'}
                 ollamaStatus={ollamaStatus}
-                introDone={!showIntro}
+                introDone={introMode !== 'quick'}
                 userPersona={userPersona}
                 messageCounts={messageCounts}
                 onEnterScene={(char) => {
@@ -1594,11 +1647,11 @@ export default function App() {
           ) : (
             <motion.div
               key={`world-chat-${activeCharacter.id}`}
-              initial={{ opacity: 0, scale: 1.015 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 1.015 }}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
               transition={{ duration: 0.34, ease: [0.22, 1, 0.36, 1] }}
-              className="h-full w-full"
+              className="m-0 h-full w-full p-0"
             >
               <ChatWindow
                 t={t}
@@ -1674,6 +1727,7 @@ export default function App() {
           }}
           onExportBackup={handleExportBackup}
           onImportBackup={handleImportBackup}
+          onReplayGrandIntro={handleReplayGrandIntro}
         />
 
         <StoryMemoryModal
@@ -1756,7 +1810,15 @@ export default function App() {
         <OfflineIndicator t={t} />
 
         <AnimatePresence>
-          {showIntro ? (
+          {introMode === 'grand' ? (
+            <GrandIntroSplash
+              key="grand-intro-splash"
+              skipHintLabel={t.grandIntroSkipHint}
+              muteLabel={t.grandIntroMuteAudio}
+              unmuteLabel={t.grandIntroUnmuteAudio}
+              onComplete={handleIntroComplete}
+            />
+          ) : introMode === 'quick' ? (
             <IntroSplash
               key="intro-splash"
               skipLabel={t.skipIntro}

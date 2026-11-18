@@ -38,6 +38,7 @@ export interface Character {
   greeting: string;
   systemPrompt: string;
   imageUrl?: string;
+  stageBackground?: string;
   wallpaperUrl?: string;
   tags: string[];
   icon: CharacterIconId;
