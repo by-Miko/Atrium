@@ -5,10 +5,10 @@ https://github.com/user-attachments/assets/2ef36b84-c708-4844-826a-67f779d8919b
 
 
 
-# Atrium — v1.3.2 (Hardened)
+# Atrium — v1.4.0 (Hardened)
 
 **Privacy-First *Liquid Glass* Roleplay Chat Studio**  
-*Atrium Engine v1.3.2 • Original Architecture by Miko*
+*Atrium Engine v1.4.0 • Original Architecture by Miko*
 
 [English](#english) · [Español](#español)
 
