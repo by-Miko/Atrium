@@ -1,6 +1,8 @@
 import { ArrowLeft } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { useEffect } from 'react';
+import { sanitizeImageUrl } from '../utils/imageUpload';
+import { sanitizeRenderedText } from '../utils/sanitize';
 
 interface ImageLightboxProps {
   imageUrl: string | null;
@@ -15,8 +17,11 @@ export function ImageLightbox({
   closeLabel,
   onClose,
 }: ImageLightboxProps) {
+  const safeImageUrl = sanitizeImageUrl(imageUrl);
+  const safeAltText = sanitizeRenderedText(altText);
+
   useEffect(() => {
-    if (!imageUrl) return;
+    if (!safeImageUrl) return;
     const handleKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         onClose();
@@ -24,11 +29,11 @@ export function ImageLightbox({
     };
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
-  }, [imageUrl, onClose]);
+  }, [safeImageUrl, onClose]);
 
   return (
     <AnimatePresence>
-      {imageUrl ? (
+      {safeImageUrl ? (
         <motion.div
           key="image-lightbox"
           role="dialog"
@@ -52,8 +57,8 @@ export function ImageLightbox({
           </button>
 
           <motion.img
-            src={imageUrl}
-            alt={altText}
+            src={safeImageUrl}
+            alt={safeAltText}
             referrerPolicy="no-referrer"
             initial={{ opacity: 0, scale: 0.96 }}
             animate={{ opacity: 1, scale: 1 }}

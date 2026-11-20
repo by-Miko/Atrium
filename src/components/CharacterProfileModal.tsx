@@ -8,6 +8,8 @@ import { AnimatePresence, motion } from 'motion/react';
 import { useEffect, useState } from 'react';
 import type { UIStrings } from '../i18n/translations';
 import type { Character } from '../types/chat';
+import { escapeCssUrl, sanitizeImageUrl } from '../utils/imageUpload';
+import { sanitizeRenderedText } from '../utils/sanitize';
 import { CharacterIcon } from './CharacterIcon';
 
 interface CharacterProfileModalProps {
@@ -50,18 +52,25 @@ export function CharacterProfileModal({
     return () => window.removeEventListener('keydown', handleKey);
   }, [character, onClose]);
 
-  const hasPortrait = Boolean(character?.imageUrl);
-  const stageArt = character?.stageBackground || character?.wallpaperUrl;
+  const safePortrait = sanitizeImageUrl(character?.imageUrl);
+  const safeStageArt =
+    sanitizeImageUrl(character?.stageBackground) ||
+    sanitizeImageUrl(character?.wallpaperUrl);
+  const hasPortrait = Boolean(safePortrait);
   const hasSeparateWallpaper = Boolean(
-    stageArt && stageArt !== character?.imageUrl
+    safeStageArt && safeStageArt !== safePortrait
   );
 
   const displayedArtwork =
     character === null
       ? ''
-      : artVariant === 'wallpaper' && stageArt
-        ? stageArt
-        : character.imageUrl || stageArt || '';
+      : artVariant === 'wallpaper' && safeStageArt
+        ? safeStageArt
+        : safePortrait || safeStageArt || '';
+  const safeCssArtwork = escapeCssUrl(displayedArtwork);
+  const safeName = character ? sanitizeRenderedText(character.name) : '';
+  const safeRole = character ? sanitizeRenderedText(character.role) : '';
+  const safeBio = character ? sanitizeRenderedText(character.bio) : '';
 
   return (
     <AnimatePresence>
@@ -116,22 +125,22 @@ export function CharacterProfileModal({
               {displayedArtwork && !imageFailed ? (
                 <button
                   type="button"
-                  onClick={() =>
-                    onOpenLightbox(displayedArtwork, character.name)
-                  }
+                  onClick={() => onOpenLightbox(displayedArtwork, safeName)}
                   aria-label={t.viewFullArt}
                   title={t.viewFullArt}
                   className="group relative flex w-full items-center justify-center bg-black/50 focus-visible:outline-2 focus-visible:outline-inset focus-visible:outline-[var(--theme-accent)]"
                 >
                   {/* Soft ambient blur behind uncropped vertical/horizontal art */}
-                  <div
-                    aria-hidden="true"
-                    className="pointer-events-none absolute inset-0 scale-110 bg-cover bg-center opacity-25 blur-2xl"
-                    style={{ backgroundImage: `url("${displayedArtwork}")` }}
-                  />
+                  {safeCssArtwork ? (
+                    <div
+                      aria-hidden="true"
+                      className="pointer-events-none absolute inset-0 scale-110 bg-cover bg-center opacity-25 blur-2xl"
+                      style={{ backgroundImage: `url("${safeCssArtwork}")` }}
+                    />
+                  ) : null}
                   <img
                     src={displayedArtwork}
-                    alt={character.name}
+                    alt={safeName}
                     referrerPolicy="no-referrer"
                     onError={() => setImageFailed(true)}
                     className="relative z-10 max-h-[48vh] w-full object-contain transition-transform duration-300 group-hover:scale-[1.015]"
@@ -191,27 +200,30 @@ export function CharacterProfileModal({
                 id="character-profile-name"
                 className="font-display text-2xl font-bold tracking-tight text-white"
               >
-                {character.name}
+                {safeName}
               </h2>
               <p className="mt-0.5 text-sm font-medium text-[var(--theme-muted)]">
-                {character.role}
+                {safeRole}
               </p>
 
               {character.tags.length > 0 ? (
                 <div className="mt-3.5 flex flex-wrap gap-1.5">
-                  {character.tags.map((tag) => (
-                    <span
-                      key={tag}
-                      className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-accent-soft)] px-2.5 py-1 text-xs font-medium text-[var(--theme-accent)]"
-                    >
-                      {tag}
-                    </span>
-                  ))}
+                  {character.tags.map((tag, idx) => {
+                    const safeTag = sanitizeRenderedText(tag);
+                    return (
+                      <span
+                        key={`${idx}-${safeTag}`}
+                        className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-accent-soft)] px-2.5 py-1 text-xs font-medium text-[var(--theme-accent)]"
+                      >
+                        {safeTag}
+                      </span>
+                    );
+                  })}
                 </div>
               ) : null}
 
               <p className="mt-4 text-sm leading-relaxed text-white/85">
-                {character.bio}
+                {safeBio}
               </p>
 
               <div className="mt-6 flex items-center gap-3">

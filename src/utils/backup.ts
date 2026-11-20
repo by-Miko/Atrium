@@ -1,14 +1,18 @@
 import type {
   BubbleSchemeId,
   Character,
+  CharacterIconId,
+  CharacterTone,
   ChatMessage,
   Language,
+  OllamaModelTag,
   OllamaSettings,
   StoryMemoryEntry,
   ThemeId,
   UserPersona,
   VisualStudioSettings,
 } from '../types/chat';
+import { sanitizeImageUrl } from './imageUpload';
 import {
   DEFAULT_NUM_CTX,
   DEFAULT_NUM_PREDICT,
@@ -16,7 +20,14 @@ import {
   DEFAULT_OPENAI_URL,
   normalizeBaseUrl,
 } from './ollama';
+import { sanitizeRenderedText } from './sanitize';
 import { hydrateVisualSettings } from './storage';
+
+const MAX_BACKUP_FILE_BYTES = 25 * 1024 * 1024;
+const MAX_BACKUP_CHARACTERS = 200;
+const MAX_BACKUP_MESSAGES_PER_CHAR = 5000;
+const MAX_BACKUP_SWIPES = 50;
+const MAX_BACKUP_MODELS = 500;
 
 export interface AtriumBackupData {
   app: 'Atrium';
@@ -48,6 +59,80 @@ const VALID_BUBBLE_SCHEMES = new Set<BubbleSchemeId>([
   'amber-gold',
   'minimalist-glass',
 ]);
+
+const VALID_CHARACTER_ICONS = new Set<CharacterIconId>([
+  'compass',
+  'orbit',
+  'flame',
+  'anchor',
+  'feather',
+  'shield',
+  'scroll',
+  'eye',
+]);
+
+const VALID_CHARACTER_TONES = new Set<CharacterTone>([
+  'cobalt',
+  'amber',
+  'emerald',
+  'rose',
+  'slate',
+]);
+
+function sanitizeAvailableModels(rawModels: unknown): OllamaModelTag[] {
+  if (!Array.isArray(rawModels)) return [];
+  const valid: OllamaModelTag[] = [];
+
+  for (const item of rawModels) {
+    if (valid.length >= MAX_BACKUP_MODELS) break;
+    if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
+    const m = item as Record<string, unknown>;
+    const rawName =
+      typeof m.name === 'string'
+        ? sanitizeRenderedText(m.name).trim().slice(0, 200)
+        : '';
+    if (!rawName) continue;
+
+    const rawDetails =
+      m.details && typeof m.details === 'object' && !Array.isArray(m.details)
+        ? (m.details as Record<string, unknown>)
+        : undefined;
+
+    valid.push({
+      name: rawName,
+      model:
+        typeof m.model === 'string'
+          ? sanitizeRenderedText(m.model).trim().slice(0, 200)
+          : rawName,
+      size:
+        typeof m.size === 'number' && Number.isFinite(m.size) && m.size >= 0
+          ? m.size
+          : undefined,
+      details: rawDetails
+        ? {
+            family:
+              typeof rawDetails.family === 'string'
+                ? sanitizeRenderedText(rawDetails.family).trim().slice(0, 80)
+                : undefined,
+            parameter_size:
+              typeof rawDetails.parameter_size === 'string'
+                ? sanitizeRenderedText(rawDetails.parameter_size)
+                    .trim()
+                    .slice(0, 40)
+                : undefined,
+            quantization_level:
+              typeof rawDetails.quantization_level === 'string'
+                ? sanitizeRenderedText(rawDetails.quantization_level)
+                    .trim()
+                    .slice(0, 40)
+                : undefined,
+          }
+        : undefined,
+    });
+  }
+
+  return valid;
+}
 
 export function downloadAtriumBackup(
   payload: Omit<AtriumBackupData, 'app' | 'version' | 'exportedAt' | 'settings'> & {
@@ -93,6 +178,10 @@ export interface ParsedBackupResult {
 }
 
 export async function parseAtriumBackupFile(file: File): Promise<ParsedBackupResult> {
+  if (file.size > MAX_BACKUP_FILE_BYTES) {
+    throw new Error('Backup file exceeds the 25 MB maximum size limit.');
+  }
+
   const rawText = await file.text();
   const parsed: unknown = JSON.parse(rawText);
 
@@ -107,31 +196,53 @@ export async function parseAtriumBackupFile(file: File): Promise<ParsedBackupRes
   }
 
   const characters: Character[] = [];
-  for (const item of record.characters) {
-    if (!item || typeof item !== 'object') continue;
+  for (const item of record.characters.slice(0, MAX_BACKUP_CHARACTERS)) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
     const c = item as Record<string, unknown>;
     if (typeof c.id !== 'string' || typeof c.name !== 'string') continue;
+    const safeId = sanitizeRenderedText(c.id).trim().slice(0, 120);
+    const safeName = sanitizeRenderedText(c.name).trim().slice(0, 120);
+    if (!safeId || !safeName) continue;
+
     characters.push({
-      id: c.id,
-      name: c.name,
-      role: typeof c.role === 'string' ? c.role : '',
-      bio: typeof c.bio === 'string' ? c.bio : '',
-      greeting: typeof c.greeting === 'string' ? c.greeting : '',
-      systemPrompt: typeof c.systemPrompt === 'string' ? c.systemPrompt : '',
-      imageUrl: typeof c.imageUrl === 'string' ? c.imageUrl : undefined,
-      stageBackground:
-        typeof c.stageBackground === 'string' ? c.stageBackground : undefined,
-      wallpaperUrl:
-        typeof c.wallpaperUrl === 'string' ? c.wallpaperUrl : undefined,
+      id: safeId,
+      name: safeName,
+      role:
+        typeof c.role === 'string'
+          ? sanitizeRenderedText(c.role).trim().slice(0, 120)
+          : '',
+      bio:
+        typeof c.bio === 'string'
+          ? sanitizeRenderedText(c.bio).trim().slice(0, 1000)
+          : '',
+      greeting:
+        typeof c.greeting === 'string'
+          ? sanitizeRenderedText(c.greeting).slice(0, 8000)
+          : '',
+      systemPrompt:
+        typeof c.systemPrompt === 'string'
+          ? sanitizeRenderedText(c.systemPrompt).slice(0, 24000)
+          : '',
+      imageUrl: sanitizeImageUrl(c.imageUrl),
+      stageBackground: sanitizeImageUrl(c.stageBackground),
+      wallpaperUrl: sanitizeImageUrl(c.wallpaperUrl),
       tags: Array.isArray(c.tags)
-        ? c.tags.filter((t): t is string => typeof t === 'string')
+        ? c.tags
+            .filter((t): t is string => typeof t === 'string')
+            .map((t) => sanitizeRenderedText(t).trim().slice(0, 40))
+            .filter(Boolean)
+            .slice(0, 8)
         : ['Roleplay'],
       icon:
-        typeof c.icon === 'string'
-          ? (c.icon as Character['icon'])
+        typeof c.icon === 'string' &&
+        VALID_CHARACTER_ICONS.has(c.icon as CharacterIconId)
+          ? (c.icon as CharacterIconId)
           : 'compass',
       tone:
-        typeof c.tone === 'string' ? (c.tone as Character['tone']) : 'cobalt',
+        typeof c.tone === 'string' &&
+        VALID_CHARACTER_TONES.has(c.tone as CharacterTone)
+          ? (c.tone as CharacterTone)
+          : 'cobalt',
     });
   }
 
@@ -152,8 +263,8 @@ export async function parseAtriumBackupFile(file: File): Promise<ParsedBackupRes
     )) {
       if (!Array.isArray(list)) continue;
       const validMsgs: ChatMessage[] = [];
-      for (const msg of list) {
-        if (!msg || typeof msg !== 'object') continue;
+      for (const msg of list.slice(-MAX_BACKUP_MESSAGES_PER_CHAR)) {
+        if (!msg || typeof msg !== 'object' || Array.isArray(msg)) continue;
         const m = msg as Record<string, unknown>;
         if (
           typeof m.id !== 'string' ||
@@ -163,7 +274,9 @@ export async function parseAtriumBackupFile(file: File): Promise<ParsedBackupRes
           continue;
         }
         const validSwipes = Array.isArray(m.swipes)
-          ? m.swipes.filter((s): s is string => typeof s === 'string')
+          ? m.swipes
+              .filter((s): s is string => typeof s === 'string')
+              .slice(-MAX_BACKUP_SWIPES)
           : undefined;
         const hasSwipes = validSwipes && validSwipes.length > 0;
         const activeSwipeIndex = hasSwipes
@@ -179,16 +292,22 @@ export async function parseAtriumBackupFile(file: File): Promise<ParsedBackupRes
           : undefined;
 
         validMsgs.push({
-          id: m.id,
+          id: sanitizeRenderedText(m.id).trim().slice(0, 120),
           role: m.role,
           content: m.content,
           swipes: hasSwipes ? validSwipes : undefined,
           activeSwipeIndex,
           createdAt:
-            typeof m.createdAt === 'number' ? m.createdAt : Date.now(),
-          model: typeof m.model === 'string' ? m.model : undefined,
+            typeof m.createdAt === 'number' && Number.isFinite(m.createdAt)
+              ? m.createdAt
+              : Date.now(),
+          model:
+            typeof m.model === 'string'
+              ? sanitizeRenderedText(m.model).trim().slice(0, 200)
+              : undefined,
           tokensPerSecond:
-            typeof m.tokensPerSecond === 'number'
+            typeof m.tokensPerSecond === 'number' &&
+            Number.isFinite(m.tokensPerSecond)
               ? m.tokensPerSecond
               : undefined,
           isStreaming: false,
@@ -211,7 +330,7 @@ export async function parseAtriumBackupFile(file: File): Promise<ParsedBackupRes
     : characters[0].id;
 
   let settings: OllamaSettings | undefined;
-  if (record.settings && typeof record.settings === 'object') {
+  if (record.settings && typeof record.settings === 'object' && !Array.isArray(record.settings)) {
     const s = record.settings as Record<string, unknown>;
     const provider = s.provider === 'openai' ? 'openai' : 'ollama';
     const fallbackUrl =
@@ -231,14 +350,22 @@ export async function parseAtriumBackupFile(file: File): Promise<ParsedBackupRes
         DEFAULT_OPENAI_URL
       ),
       selectedModel:
-        typeof s.selectedModel === 'string' ? s.selectedModel : '',
-      availableModels: Array.isArray(s.availableModels)
-        ? (s.availableModels as OllamaSettings['availableModels'])
-        : [],
-      temperature: typeof s.temperature === 'number' ? s.temperature : 0.8,
+        typeof s.selectedModel === 'string'
+          ? sanitizeRenderedText(s.selectedModel).trim().slice(0, 200)
+          : '',
+      availableModels: sanitizeAvailableModels(s.availableModels),
+      temperature:
+        typeof s.temperature === 'number' && Number.isFinite(s.temperature)
+          ? Math.min(2, Math.max(0, s.temperature))
+          : 0.8,
       numPredict:
-        typeof s.numPredict === 'number' ? s.numPredict : DEFAULT_NUM_PREDICT,
-      numCtx: typeof s.numCtx === 'number' ? s.numCtx : DEFAULT_NUM_CTX,
+        typeof s.numPredict === 'number' && Number.isFinite(s.numPredict)
+          ? Math.min(8192, Math.max(16, Math.round(s.numPredict)))
+          : DEFAULT_NUM_PREDICT,
+      numCtx:
+        typeof s.numCtx === 'number' && Number.isFinite(s.numCtx)
+          ? Math.min(131072, Math.max(512, Math.round(s.numCtx)))
+          : DEFAULT_NUM_CTX,
       storyMemoryEnabled: s.storyMemoryEnabled !== false,
     };
   }
@@ -253,18 +380,21 @@ export async function parseAtriumBackupFile(file: File): Promise<ParsedBackupRes
     for (const [charId, entry] of Object.entries(
       record.storyMemories as Record<string, unknown>
     )) {
-      if (!entry || typeof entry !== 'object') continue;
+      if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue;
       const e = entry as Record<string, unknown>;
       if (typeof e.summary === 'string' && e.summary.trim().length > 0) {
         storyMemories[charId] = {
-          summary: e.summary,
+          summary: sanitizeRenderedText(e.summary).slice(0, 4000),
           summarizedMessageCount:
             typeof e.summarizedMessageCount === 'number' &&
+            Number.isFinite(e.summarizedMessageCount) &&
             e.summarizedMessageCount >= 0
               ? Math.floor(e.summarizedMessageCount)
               : 0,
           updatedAt:
-            typeof e.updatedAt === 'number' ? e.updatedAt : Date.now(),
+            typeof e.updatedAt === 'number' && Number.isFinite(e.updatedAt)
+              ? e.updatedAt
+              : Date.now(),
         };
       }
     }
@@ -295,9 +425,18 @@ export async function parseAtriumBackupFile(file: File): Promise<ParsedBackupRes
   ) {
     const p = record.userPersona as Record<string, unknown>;
     userPersona = {
-      name: typeof p.name === 'string' ? p.name : '',
-      appearance: typeof p.appearance === 'string' ? p.appearance : '',
-      bio: typeof p.bio === 'string' ? p.bio : '',
+      name:
+        typeof p.name === 'string'
+          ? sanitizeRenderedText(p.name).trim().slice(0, 80)
+          : '',
+      appearance:
+        typeof p.appearance === 'string'
+          ? sanitizeRenderedText(p.appearance).trim().slice(0, 500)
+          : '',
+      bio:
+        typeof p.bio === 'string'
+          ? sanitizeRenderedText(p.bio).trim().slice(0, 700)
+          : '',
     };
   }
 

@@ -167,6 +167,7 @@ export interface UIStrings {
   importBackupButton: string;
   backupExportSuccess: (charCount: number) => string;
   backupImportSuccess: (charCount: number, chatCount: number) => string;
+  backupApiKeyClearedWarning: string;
   backupImportError: string;
   backupSecurityNote: string;
   userPersonaBadgeLabel: (name?: string) => string;
@@ -495,6 +496,8 @@ export const TRANSLATIONS: Record<Language, UIStrings> = {
       `Backup downloaded (${charCount} characters exported).`,
     backupImportSuccess: (charCount, chatCount) =>
       `Backup restored: ${charCount} characters and ${chatCount} chat histories loaded.`,
+    backupApiKeyClearedWarning:
+      'Security notice: This backup changed the API endpoint URL, so your active API key was cleared from memory to prevent sending credentials to an untrusted server.',
     backupImportError:
       'Invalid backup file. Please select a valid Atrium .json backup.',
     backupSecurityNote:
@@ -889,6 +892,8 @@ export const TRANSLATIONS: Record<Language, UIStrings> = {
       `Copia descargada (${charCount} personajes exportados).`,
     backupImportSuccess: (charCount, chatCount) =>
       `Copia restaurada: ${charCount} personajes y ${chatCount} historiales cargados.`,
+    backupApiKeyClearedWarning:
+      'Aviso de seguridad: Esta copia cambió la URL del endpoint de API, por lo que tu clave API activa se borró de memoria para evitar enviarla a un servidor no confiable.',
     backupImportError:
       'Archivo de respaldo inválido. Selecciona un archivo .json válido de Atrium.',
     backupSecurityNote:

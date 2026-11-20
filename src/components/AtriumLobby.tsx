@@ -14,7 +14,9 @@ import { motion } from 'motion/react';
 import { useMemo, useRef, useState, type ChangeEvent } from 'react';
 import type { UIStrings } from '../i18n/translations';
 import type { ApiProvider, Character, UserPersona } from '../types/chat';
+import { sanitizeImageUrl } from '../utils/imageUpload';
 import { parsePngCharacterCard } from '../utils/pngCharacterCard';
+import { sanitizeRenderedText } from '../utils/sanitize';
 import { CharacterIcon } from './CharacterIcon';
 import { PWAInstallButton } from './PWAInstallButton';
 
@@ -64,7 +66,14 @@ function LobbyCharacterCard({
 }: LobbyCardProps) {
   const [imgFailed, setImgFailed] = useState(false);
   const [hasEntered, setHasEntered] = useState(false);
-  const showImage = Boolean(character.imageUrl) && !imgFailed;
+  const safeImageUrl = sanitizeImageUrl(character.imageUrl);
+  const safeName = sanitizeRenderedText(character.name);
+  const safeRole = sanitizeRenderedText(character.role);
+  const safeBio = sanitizeRenderedText(character.bio);
+  const safeTags = character.tags
+    .slice(0, 3)
+    .map((tag) => sanitizeRenderedText(tag));
+  const showImage = Boolean(safeImageUrl) && !imgFailed;
 
   return (
     <motion.div
@@ -108,8 +117,8 @@ function LobbyCharacterCard({
     >
       {showImage ? (
         <img
-          src={character.imageUrl}
-          alt={character.name}
+          src={safeImageUrl}
+          alt={safeName}
           decoding="async"
           referrerPolicy="no-referrer"
           onError={() => setImgFailed(true)}
@@ -165,8 +174,8 @@ function LobbyCharacterCard({
               e.stopPropagation();
               onOpenProfile();
             }}
-            aria-label={`${t.viewCharacterProfile}: ${character.name}`}
-            title={`${t.viewCharacterProfile}: ${character.name}`}
+            aria-label={`${t.viewCharacterProfile}: ${safeName}`}
+            title={`${t.viewCharacterProfile}: ${safeName}`}
             className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/15 bg-black/50 text-white/80 opacity-85 backdrop-blur-md transition-all hover:border-amber-300/50 hover:bg-black/75 hover:text-white focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-[var(--theme-accent)] sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"
           >
             <Eye className="h-3.5 w-3.5" />
@@ -178,8 +187,8 @@ function LobbyCharacterCard({
               e.stopPropagation();
               onEdit();
             }}
-            aria-label={`${t.editCharacterTitle}: ${character.name}`}
-            title={`${t.editCharacterTitle}: ${character.name}`}
+            aria-label={`${t.editCharacterTitle}: ${safeName}`}
+            title={`${t.editCharacterTitle}: ${safeName}`}
             className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/15 bg-black/50 text-white/80 opacity-85 backdrop-blur-md transition-all hover:border-amber-300/50 hover:bg-black/75 hover:text-white focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-[var(--theme-accent)] sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"
           >
             <Pencil className="h-3.5 w-3.5" />
@@ -192,22 +201,22 @@ function LobbyCharacterCard({
         onClick={onEnterScene}
         className="absolute inset-0 flex flex-col justify-end p-5 text-left focus-visible:outline-2 focus-visible:outline-inset focus-visible:outline-[var(--theme-accent)]"
       >
-        {character.tags.length > 0 ? (
+        {safeTags.length > 0 ? (
           <p className="mb-1.5 truncate text-[11px] font-medium text-[var(--theme-accent)] transition-colors group-hover:text-amber-200">
-            {character.tags.slice(0, 3).join(' · ')}
+            {safeTags.join(' · ')}
           </p>
         ) : null}
 
         <h2 className="truncate font-display text-lg font-semibold leading-tight text-white">
-          {character.name}
+          {safeName}
         </h2>
 
         <p className="mt-0.5 truncate text-xs font-medium text-white/75">
-          {character.role}
+          {safeRole}
         </p>
 
         <p className="mt-2 line-clamp-2 text-[13px] leading-snug text-white/80">
-          {character.bio}
+          {safeBio}
         </p>
       </button>
     </motion.div>
@@ -621,7 +630,8 @@ export function AtriumLobby({
               <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:flex-wrap sm:overflow-visible sm:pb-0">
                 {allTags.map((tag) => {
                   const selected = activeTag === tag;
-                  const label = tag === ALL_TAG_KEY ? t.allTag : tag;
+                  const label =
+                    tag === ALL_TAG_KEY ? t.allTag : sanitizeRenderedText(tag);
                   return (
                     <button
                       key={tag}

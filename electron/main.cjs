@@ -2,8 +2,16 @@ const { app, BrowserWindow, ipcMain, safeStorage, session } = require('electron'
 const { spawn } = require('child_process');
 const path = require('path');
 
+const MAX_SECRET_PLAINTEXT_LENGTH = 8192;
+const MAX_SECRET_ENCRYPTED_LENGTH = 16384;
+
+const PACKAGED_CSP =
+  "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://googleapis.com; font-src 'self' https://fonts.gstatic.com https://gstatic.com; img-src 'self' data: blob: https: http://localhost:* http://127.0.0.1:*; connect-src 'self' http://localhost:* http://127.0.0.1:* http://192.168.* http://10.* http://100.* https://*; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'none';";
+
 let mainWindow = null;
 let speechProcess = null;
+let pendingFocusResolver = null;
+let pendingFocusTimer = null;
 
 app.setAppUserModelId('com.atrium.roleplay');
 
@@ -14,6 +22,34 @@ const ALLOWED_MEDIA_PERMISSIONS = new Set([
   'clipboard-read',
   'clipboard-sanitized-write',
 ]);
+
+function isAuthorizedIpcEvent(event) {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return false;
+  }
+  const contents = mainWindow.webContents;
+  if (!contents || contents.isDestroyed()) {
+    return false;
+  }
+  if (event.sender !== contents) {
+    return false;
+  }
+  if (!event.senderFrame || event.senderFrame !== contents.mainFrame) {
+    return false;
+  }
+  return true;
+}
+
+function isAllowedDevNavigation(targetUrl) {
+  if (app.isPackaged) return false;
+  const devServerUrl = process.env.VITE_DEV_SERVER_URL;
+  if (!devServerUrl) return false;
+  try {
+    return new URL(targetUrl).origin === new URL(devServerUrl).origin;
+  } catch {
+    return false;
+  }
+}
 
 function configurePermissions() {
   const defaultSession = session.defaultSession;
@@ -29,6 +65,43 @@ function configurePermissions() {
     }
   );
 }
+
+function configurePackagedCsp() {
+  if (!app.isPackaged) return;
+  const defaultSession = session.defaultSession;
+  if (!defaultSession) return;
+
+  defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    if (!details.url.startsWith('file://')) {
+      callback({ responseHeaders: details.responseHeaders });
+      return;
+    }
+
+    const responseHeaders = { ...(details.responseHeaders || {}) };
+    for (const headerName of Object.keys(responseHeaders)) {
+      if (headerName.toLowerCase() === 'content-security-policy') {
+        delete responseHeaders[headerName];
+      }
+    }
+    responseHeaders['Content-Security-Policy'] = [PACKAGED_CSP];
+    callback({ responseHeaders });
+  });
+}
+
+app.on('web-contents-created', (_event, contents) => {
+  contents.setWindowOpenHandler(() => ({ action: 'deny' }));
+
+  contents.on('will-navigate', (navEvent, targetUrl) => {
+    if (isAllowedDevNavigation(targetUrl)) {
+      return;
+    }
+    navEvent.preventDefault();
+  });
+
+  contents.on('will-attach-webview', (attachEvent) => {
+    attachEvent.preventDefault();
+  });
+});
 
 function sendSpeechEvent(channel, payload) {
   if (mainWindow && !mainWindow.isDestroyed()) {
@@ -90,6 +163,18 @@ function parsePowerShellStderr(rawText) {
   return withoutHeader.replace(/\s+/g, ' ').trim();
 }
 
+function resolvePendingFocus() {
+  if (pendingFocusTimer) {
+    clearTimeout(pendingFocusTimer);
+    pendingFocusTimer = null;
+  }
+  if (pendingFocusResolver) {
+    const resolve = pendingFocusResolver;
+    pendingFocusResolver = null;
+    resolve();
+  }
+}
+
 async function focusChatInputBox() {
   if (!mainWindow || mainWindow.isDestroyed()) return;
   try {
@@ -99,47 +184,14 @@ async function focusChatInputBox() {
     mainWindow.focus();
     mainWindow.webContents.focus();
 
-    await mainWindow.webContents.executeJavaScript(
-      `new Promise((resolve) => {
-        let attempts = 0;
-        const focusInput = () => {
-          const active = document.activeElement;
-          if (
-            active &&
-            (active.tagName === 'TEXTAREA' ||
-              (active.tagName === 'INPUT' &&
-                /^(text|search|url|email|tel)$/i.test(active.type || 'text')) ||
-              active.isContentEditable)
-          ) {
-            active.focus();
-            resolve(true);
-            return;
-          }
-          const textarea =
-            document.querySelector('form textarea:not([disabled])') ||
-            document.querySelector('textarea:not([disabled])');
-          if (textarea && typeof textarea.focus === 'function') {
-            textarea.focus();
-            const len = textarea.value ? textarea.value.length : 0;
-            if (typeof textarea.setSelectionRange === 'function') {
-              textarea.setSelectionRange(len, len);
-            }
-            resolve(true);
-            return;
-          }
-          attempts += 1;
-          if (attempts < 24) {
-            requestAnimationFrame(focusInput);
-            return;
-          }
-          resolve(false);
-        };
-        requestAnimationFrame(focusInput);
-      })`,
-      true
-    );
+    resolvePendingFocus();
+    await new Promise((resolve) => {
+      pendingFocusResolver = resolve;
+      pendingFocusTimer = setTimeout(resolvePendingFocus, 350);
+      mainWindow.webContents.send('atrium:focus-chat-input');
+    });
   } catch {
-    // ignore focus errors if window is closing
+    resolvePendingFocus();
   }
 }
 
@@ -318,29 +370,24 @@ function createMainWindow() {
     mainWindow?.show();
   });
 
-  mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
-
   const devServerUrl = process.env.VITE_DEV_SERVER_URL;
-  mainWindow.webContents.on('will-navigate', (event, targetUrl) => {
-    if (devServerUrl && targetUrl.startsWith(devServerUrl)) {
-      return;
-    }
-    event.preventDefault();
-  });
-
-  if (devServerUrl) {
+  if (!isProd && devServerUrl) {
     void mainWindow.loadURL(devServerUrl);
   } else {
     void mainWindow.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));
   }
 
   mainWindow.on('closed', () => {
+    resolvePendingFocus();
     stopNativeDictationProcess();
     mainWindow = null;
   });
 }
 
-ipcMain.on('atrium:close-window', () => {
+ipcMain.on('atrium:close-window', (event) => {
+  if (!isAuthorizedIpcEvent(event)) {
+    return;
+  }
   stopNativeDictationProcess();
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.close();
@@ -349,20 +396,42 @@ ipcMain.on('atrium:close-window', () => {
   }
 });
 
-ipcMain.handle('atrium:speech-start', async (_event, language) => {
+ipcMain.on('atrium:focus-chat-input-done', (event) => {
+  if (!isAuthorizedIpcEvent(event)) {
+    return;
+  }
+  resolvePendingFocus();
+});
+
+ipcMain.handle('atrium:speech-start', async (event, language) => {
+  if (!isAuthorizedIpcEvent(event)) {
+    throw new Error('Unauthorized IPC sender');
+  }
   return startNativeDictationProcess(language);
 });
 
-ipcMain.handle('atrium:speech-stop', () => {
+ipcMain.handle('atrium:speech-stop', (event) => {
+  if (!isAuthorizedIpcEvent(event)) {
+    throw new Error('Unauthorized IPC sender');
+  }
   stopNativeDictationProcess();
   return { ok: true };
 });
 
 const SAFE_STORAGE_PREFIX = 'SAFE_V1:';
 
-ipcMain.handle('atrium:secret-encrypt', (_event, plaintext) => {
-  if (typeof plaintext !== 'string' || !plaintext) {
+ipcMain.handle('atrium:secret-encrypt', (event, plaintext) => {
+  if (!isAuthorizedIpcEvent(event)) {
+    throw new Error('Unauthorized IPC sender');
+  }
+  if (typeof plaintext !== 'string') {
+    return { ok: false, fallbackSessionOnly: true };
+  }
+  if (!plaintext) {
     return { ok: true, encrypted: '' };
+  }
+  if (plaintext.length > MAX_SECRET_PLAINTEXT_LENGTH) {
+    return { ok: false, fallbackSessionOnly: true };
   }
   try {
     if (!safeStorage || !safeStorage.isEncryptionAvailable()) {
@@ -378,11 +447,20 @@ ipcMain.handle('atrium:secret-encrypt', (_event, plaintext) => {
   }
 });
 
-ipcMain.handle('atrium:secret-decrypt', (_event, encryptedPayload) => {
-  if (typeof encryptedPayload !== 'string' || !encryptedPayload) {
+ipcMain.handle('atrium:secret-decrypt', (event, encryptedPayload) => {
+  if (!isAuthorizedIpcEvent(event)) {
+    throw new Error('Unauthorized IPC sender');
+  }
+  if (typeof encryptedPayload !== 'string') {
+    return { ok: false, plaintext: '' };
+  }
+  if (!encryptedPayload) {
     return { ok: true, plaintext: '' };
   }
-  if (!encryptedPayload.startsWith(SAFE_STORAGE_PREFIX)) {
+  if (
+    encryptedPayload.length > MAX_SECRET_ENCRYPTED_LENGTH ||
+    !encryptedPayload.startsWith(SAFE_STORAGE_PREFIX)
+  ) {
     return { ok: false, plaintext: '' };
   }
   try {
@@ -390,7 +468,13 @@ ipcMain.handle('atrium:secret-decrypt', (_event, encryptedPayload) => {
       return { ok: false, plaintext: '' };
     }
     const base64Body = encryptedPayload.slice(SAFE_STORAGE_PREFIX.length);
+    if (!base64Body) {
+      return { ok: false, plaintext: '' };
+    }
     const buffer = Buffer.from(base64Body, 'base64');
+    if (buffer.length === 0) {
+      return { ok: false, plaintext: '' };
+    }
     const plaintext = safeStorage.decryptString(buffer);
     return { ok: true, plaintext };
   } catch {
@@ -400,6 +484,7 @@ ipcMain.handle('atrium:secret-decrypt', (_event, encryptedPayload) => {
 
 app.whenReady().then(() => {
   configurePermissions();
+  configurePackagedCsp();
   createMainWindow();
 
   app.on('activate', () => {
@@ -410,10 +495,12 @@ app.whenReady().then(() => {
 });
 
 app.on('before-quit', () => {
+  resolvePendingFocus();
   stopNativeDictationProcess();
 });
 
 app.on('window-all-closed', () => {
+  resolvePendingFocus();
   stopNativeDictationProcess();
   if (process.platform !== 'darwin') {
     app.quit();

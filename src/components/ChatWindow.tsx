@@ -49,6 +49,8 @@ import type {
   UserPersona,
   WallpaperFitMode,
 } from '../types/chat';
+import { sanitizeImageUrl } from '../utils/imageUpload';
+import { sanitizeRenderedText } from '../utils/sanitize';
 import { CharacterIcon } from './CharacterIcon';
 import { MessageContent } from './MessageContent';
 
@@ -204,12 +206,17 @@ export function ChatWindow({
     onError: handleVoiceError,
   });
 
-  const activeWallpaper =
-    character.stageBackground || character.wallpaperUrl || character.imageUrl;
+  const safeAvatarUrl = sanitizeImageUrl(character.imageUrl);
+  const safeStageUrl =
+    sanitizeImageUrl(character.stageBackground) ||
+    sanitizeImageUrl(character.wallpaperUrl);
+  const activeWallpaper = safeStageUrl || safeAvatarUrl;
   const hasDedicatedStage = Boolean(
-    character.stageBackground ||
-      (character.wallpaperUrl && character.wallpaperUrl !== character.imageUrl)
+    safeStageUrl && safeStageUrl !== safeAvatarUrl
   );
+  const safeCharacterName = sanitizeRenderedText(character.name);
+  const safeCharacterRole = sanitizeRenderedText(character.role);
+  const safeSelectedModel = sanitizeRenderedText(selectedModel);
 
   useEffect(() => {
     setWallpaperFailed(false);
@@ -468,7 +475,7 @@ export function ChatWindow({
   };
 
   const hasWallpaper = Boolean(activeWallpaper) && !wallpaperFailed;
-  const hasAvatar = Boolean(character.imageUrl) && !avatarFailed;
+  const hasAvatar = Boolean(safeAvatarUrl) && !avatarFailed;
 
   const hiddenOlderCount = Math.max(0, messages.length - visibleCount);
   const windowedMessages =
@@ -680,7 +687,7 @@ export function ChatWindow({
             type="button"
             onClick={onOpenCharacterProfile}
             title={t.viewCharacterProfile}
-            aria-label={`${t.viewCharacterProfile}: ${character.name}`}
+            aria-label={`${t.viewCharacterProfile}: ${safeCharacterName}`}
             className="group flex min-w-0 items-center gap-2.5 rounded-full border border-white/[0.15] py-1 pr-4 pl-1.5 text-left transition-all hover:border-white/30 focus-visible:outline-2 focus-visible:outline-[var(--theme-accent)]"
             style={LIQUID_GLASS_PILL_STYLE}
           >
@@ -694,8 +701,8 @@ export function ChatWindow({
 
               {hasAvatar ? (
                 <img
-                  src={character.imageUrl}
-                  alt={character.name}
+                  src={safeAvatarUrl}
+                  alt={safeCharacterName}
                   referrerPolicy="no-referrer"
                   onError={() => setAvatarFailed(true)}
                   className={`relative z-10 h-8 w-8 shrink-0 rounded-full border object-cover shadow transition-all group-hover:scale-[1.04] ${
@@ -720,13 +727,13 @@ export function ChatWindow({
 
             <div className="min-w-0">
               <h2 className="truncate font-display text-[13.5px] leading-tight font-semibold text-white transition-colors group-hover:text-[var(--theme-accent)]">
-                {character.name}
+                {safeCharacterName}
               </h2>
               <p className="truncate text-[11px] leading-tight text-white/65">
-                <span>{character.role}</span>
+                <span>{safeCharacterRole}</span>
                 <span aria-hidden="true"> · </span>
                 <span className="font-mono">
-                  {selectedModel || t.noModelSelected}
+                  {safeSelectedModel || t.noModelSelected}
                 </span>
               </p>
             </div>
@@ -1076,8 +1083,8 @@ export function ChatWindow({
                 {!isUser ? (
                   hasAvatar ? (
                     <img
-                      src={character.imageUrl}
-                      alt={character.name}
+                      src={safeAvatarUrl}
+                      alt={safeCharacterName}
                       referrerPolicy="no-referrer"
                       className="mt-1 h-9 w-9 shrink-0 rounded-xl border border-white/20 object-cover shadow-md"
                     />
@@ -1131,13 +1138,13 @@ export function ChatWindow({
                     <div className="mb-1.5 flex items-center justify-between gap-3 text-xs text-[var(--theme-muted)]">
                       <div className="flex min-w-0 items-center gap-2">
                         <span className="truncate font-display font-semibold text-white">
-                          {character.name}
+                          {safeCharacterName}
                         </span>
                         {message.model ? (
                           <>
                             <span aria-hidden="true">·</span>
                             <span className="truncate font-mono text-[11px]">
-                              {message.model}
+                              {sanitizeRenderedText(message.model)}
                             </span>
                           </>
                         ) : null}
@@ -1438,7 +1445,7 @@ export function ChatWindow({
                   <span className="max-w-[180px] truncate sm:max-w-[230px]">
                     {draft.trim()
                       ? draft.trim()
-                      : t.collapsedReplyLabel(character.name)}
+                      : t.collapsedReplyLabel(safeCharacterName)}
                   </span>
                   <ChevronUp className="h-3.5 w-3.5 shrink-0 text-white/55" />
                 </button>
@@ -1512,9 +1519,9 @@ export function ChatWindow({
                   placeholder={
                     isListening
                       ? t.listeningPlaceholder
-                      : t.replyPlaceholder(character.name)
+                      : t.replyPlaceholder(safeCharacterName)
                   }
-                  aria-label={t.replyPlaceholder(character.name)}
+                  aria-label={t.replyPlaceholder(safeCharacterName)}
                   style={{
                     height: '34px',
                     fontFamily: 'var(--chat-font-family, inherit)',

@@ -1501,7 +1501,13 @@ export default function App() {
   ]);
 
   const handleImportBackup = useCallback(
-    async (file: File): Promise<{ charCount: number; chatCount: number }> => {
+    async (
+      file: File
+    ): Promise<{
+      charCount: number;
+      chatCount: number;
+      apiKeyCleared: boolean;
+    }> => {
       const parsed = await parseAtriumBackupFile(file);
       if (streamingCharacterId) {
         stopStreaming();
@@ -1513,11 +1519,30 @@ export default function App() {
       if (parsed.storyMemories) {
         setStoryMemories(parsed.storyMemories);
       }
+      let apiKeyCleared = false;
       if (parsed.settings) {
-        setSettings((prev) => ({
-          ...parsed.settings!,
-          apiKey: prev.apiKey,
-        }));
+        const normalizeEndpoint = (url: string | undefined) =>
+          (url ?? '').trim().replace(/\/+$/, '').toLowerCase();
+        const endpointChanged =
+          normalizeEndpoint(parsed.settings.baseUrl) !==
+            normalizeEndpoint(settings.baseUrl) ||
+          normalizeEndpoint(parsed.settings.openaiBaseUrl) !==
+            normalizeEndpoint(settings.openaiBaseUrl);
+
+        if (endpointChanged) {
+          if (Boolean(settings.apiKey?.trim())) {
+            apiKeyCleared = true;
+          }
+          setSettings({
+            ...parsed.settings,
+            apiKey: '',
+          });
+        } else {
+          setSettings((prev) => ({
+            ...parsed.settings!,
+            apiKey: prev.apiKey,
+          }));
+        }
       }
       if (parsed.userPersona) {
         setUserPersona(parsed.userPersona);
@@ -1538,9 +1563,10 @@ export default function App() {
       return {
         charCount: hydrated.length,
         chatCount: parsed.chatCount,
+        apiKeyCleared,
       };
     },
-    [stopStreaming, streamingCharacterId]
+    [settings.apiKey, settings.baseUrl, settings.openaiBaseUrl, stopStreaming, streamingCharacterId]
   );
 
   return (

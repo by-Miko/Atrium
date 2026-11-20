@@ -55,6 +55,55 @@ export interface UrlValidationResult {
   error?: string;
 }
 
+function isValidIpv4Host(hostname: string): boolean {
+  const parts = hostname.split('.');
+  if (parts.length !== 4) return false;
+  return parts.every((p) => /^\d{1,3}$/.test(p) && Number(p) <= 255);
+}
+
+function isBlockedMetadataOrLinkLocalHost(rawHostname: string): boolean {
+  const host = rawHostname.toLowerCase().replace(/^\[|\]$/g, '');
+  if (!host) return true;
+  if (
+    host === '0.0.0.0' ||
+    host === 'metadata' ||
+    host === 'metadata.google.internal' ||
+    host.endsWith('.internal')
+  ) {
+    return true;
+  }
+  if (isValidIpv4Host(host) && host.startsWith('169.254.')) {
+    return true;
+  }
+  if (host.startsWith('fe80:')) {
+    return true;
+  }
+  return false;
+}
+
+function isLocalOrPrivateHttpHost(rawHostname: string): boolean {
+  const host = rawHostname.toLowerCase().replace(/^\[|\]$/g, '');
+  if (
+    host === 'localhost' ||
+    host.endsWith('.localhost') ||
+    host.endsWith('.local') ||
+    host === '::1'
+  ) {
+    return true;
+  }
+  if (!isValidIpv4Host(host)) {
+    return false;
+  }
+  const octets = host.split('.').map(Number);
+  const [a, b] = octets;
+  if (a === 127) return true; // Loopback 127.0.0.0/8
+  if (a === 10) return true; // LAN 10.0.0.0/8
+  if (a === 192 && b === 168) return true; // LAN 192.168.0.0/16
+  if (a === 172 && b >= 16 && b <= 31) return true; // LAN 172.16.0.0/12
+  if (a === 100) return true; // Tailscale / CGNAT 100.*
+  return false;
+}
+
 export function validateProviderBaseUrl(
   rawUrl: string,
   fallback = DEFAULT_OLLAMA_URL
@@ -97,6 +146,24 @@ export function validateProviderBaseUrl(
       valid: false,
       normalized: '',
       error: 'Invalid Base URL: missing hostname.',
+    };
+  }
+
+  if (isBlockedMetadataOrLinkLocalHost(parsed.hostname)) {
+    return {
+      valid: false,
+      normalized: '',
+      error:
+        'Blocked unsafe endpoint: link-local and cloud metadata addresses (e.g. 169.254.169.254) are not permitted.',
+    };
+  }
+
+  if (parsed.protocol === 'http:' && !isLocalOrPrivateHttpHost(parsed.hostname)) {
+    return {
+      valid: false,
+      normalized: '',
+      error:
+        'Plain http:// is only permitted for localhost, LAN (192.168.*/10.*), or Tailscale (100.*) endpoints. Use https:// for remote APIs.',
     };
   }
 
@@ -154,8 +221,13 @@ function buildOpenAIHeaders(
   if (trimmedKey) {
     headers.Authorization = `Bearer ${trimmedKey}`;
   }
-  if (baseUrl.toLowerCase().includes('anthropic.com')) {
-    headers['anthropic-dangerous-direct-browser-access'] = 'true';
+  try {
+    const hostname = new URL(baseUrl).hostname.toLowerCase();
+    if (hostname === 'anthropic.com' || hostname.endsWith('.anthropic.com')) {
+      headers['anthropic-dangerous-direct-browser-access'] = 'true';
+    }
+  } catch {
+    // ignore malformed URL
   }
   return headers;
 }

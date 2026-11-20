@@ -14,8 +14,12 @@ import {
 } from '../data/defaultCharacters';
 import type { UIStrings } from '../i18n/translations';
 import type { Character, CharacterIconId, CharacterTone } from '../types/chat';
-import { readImageFileAsDataUrl } from '../utils/imageUpload';
+import {
+  readImageFileAsDataUrl,
+  sanitizeImageUrl,
+} from '../utils/imageUpload';
 import { parsePngCharacterCard } from '../utils/pngCharacterCard';
+import { sanitizeRenderedText } from '../utils/sanitize';
 import {
   CHARACTER_ICON_OPTIONS,
   CHARACTER_TONE_OPTIONS,
@@ -165,27 +169,50 @@ export function CharacterModal({
     e.preventDefault();
     if (!name.trim() || !systemPrompt.trim()) return;
 
+    const trimmedImageUrl = imageUrl.trim();
+    const safeImageUrl = trimmedImageUrl
+      ? sanitizeImageUrl(trimmedImageUrl)
+      : undefined;
+    if (trimmedImageUrl && !safeImageUrl) {
+      setUploadError(
+        'Unsafe avatar image URL. Only https://, http://, blob:, or raster PNG/JPEG/WebP/GIF data URLs are allowed.'
+      );
+      return;
+    }
+
+    const trimmedStageBg = stageBackground.trim();
+    const safeStageBg = trimmedStageBg
+      ? sanitizeImageUrl(trimmedStageBg)
+      : undefined;
+    if (trimmedStageBg && !safeStageBg) {
+      setUploadError(
+        'Unsafe stage wallpaper URL. Only https://, http://, blob:, or raster PNG/JPEG/WebP/GIF data URLs are allowed.'
+      );
+      return;
+    }
+
     const tags = tagsInput
       .split(',')
-      .map((tag) => tag.trim())
+      .map((tag) => sanitizeRenderedText(tag).trim())
       .filter(Boolean)
       .slice(0, 5);
 
+    const safeName = sanitizeRenderedText(name).trim();
     const nextCharacter: Character = {
       id:
         editingCharacter?.id ??
         `char-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
-      name: name.trim(),
-      role: role.trim() || 'Roleplay Persona',
-      bio: bio.trim() || 'Custom roleplay character.',
+      name: safeName,
+      role: sanitizeRenderedText(role).trim() || 'Roleplay Persona',
+      bio: sanitizeRenderedText(bio).trim() || 'Custom roleplay character.',
       greeting:
-        greeting.trim() ||
-        `*${name.trim()} greets you quietly.* What would you like to begin with?`,
+        sanitizeRenderedText(greeting).trim() ||
+        `*${safeName} greets you quietly.* What would you like to begin with?`,
       tags,
-      imageUrl: imageUrl.trim() || undefined,
-      stageBackground: stageBackground.trim() || undefined,
+      imageUrl: safeImageUrl,
+      stageBackground: safeStageBg,
       wallpaperUrl: undefined,
-      systemPrompt: systemPrompt.trim(),
+      systemPrompt: sanitizeRenderedText(systemPrompt).trim(),
       icon,
       tone,
     };
@@ -193,6 +220,9 @@ export function CharacterModal({
     onSave(nextCharacter);
     onClose();
   };
+
+  const previewAvatarUrl = sanitizeImageUrl(imageUrl);
+  const previewStageUrl = sanitizeImageUrl(stageBackground) || previewAvatarUrl;
 
   return (
     <div
@@ -342,9 +372,9 @@ export function CharacterModal({
 
               <div className="flex items-center gap-3">
                 <div className="h-16 w-12 shrink-0 overflow-hidden rounded-xl border border-white/15 bg-black/50">
-                  {imageUrl ? (
+                  {previewAvatarUrl ? (
                     <img
-                      src={imageUrl}
+                      src={previewAvatarUrl}
                       alt={t.avatarCardImageLabel}
                       referrerPolicy="no-referrer"
                       className="h-full w-full object-cover"
@@ -423,9 +453,9 @@ export function CharacterModal({
 
               <div className="flex items-center gap-3">
                 <div className="h-14 w-24 shrink-0 overflow-hidden rounded-xl border border-white/15 bg-black/50">
-                  {stageBackground || imageUrl ? (
+                  {previewStageUrl ? (
                     <img
-                      src={stageBackground || imageUrl}
+                      src={previewStageUrl}
                       alt={t.wallpaperImageLabel}
                       referrerPolicy="no-referrer"
                       className="h-full w-full object-cover opacity-85"

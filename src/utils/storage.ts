@@ -15,6 +15,7 @@ import {
   DEFAULT_VISUAL_STUDIO_SETTINGS,
   isValidHexColor,
 } from '../themes/palettes';
+import { sanitizeImageUrl } from './imageUpload';
 import {
   DEFAULT_NUM_CTX,
   DEFAULT_NUM_PREDICT,
@@ -254,9 +255,11 @@ export function hydrateCharacters(saved: Character[] | undefined): Character[] {
     const fallback = defaultsById.get(char.id);
     return {
       ...char,
-      imageUrl: char.imageUrl || fallback?.imageUrl,
-      stageBackground: char.stageBackground || fallback?.stageBackground,
-      wallpaperUrl: char.wallpaperUrl || fallback?.wallpaperUrl,
+      imageUrl: sanitizeImageUrl(char.imageUrl) || fallback?.imageUrl,
+      stageBackground:
+        sanitizeImageUrl(char.stageBackground) || fallback?.stageBackground,
+      wallpaperUrl:
+        sanitizeImageUrl(char.wallpaperUrl) || fallback?.wallpaperUrl,
       greeting:
         char.greeting ||
         fallback?.greeting ||

@@ -1,18 +1,9 @@
 import { Fragment, type ReactNode } from 'react';
+import { sanitizeRenderedText } from '../utils/sanitize';
 
 interface MessageContentProps {
   content: string;
   variant?: 'user' | 'assistant';
-}
-
-function sanitizeRenderedText(raw: string): string {
-  // Strip unsafe control & bidirectional override characters while keeping newlines/tabs intact.
-  // All content is rendered exclusively via React JSX text nodes (never dangerouslySetInnerHTML),
-  // guaranteeing raw HTML tags like <script> or inline event handlers are strictly escaped as inert text.
-  return raw.replace(
-    /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F\u202A-\u202E\u2066-\u2069]/g,
-    ''
-  );
 }
 
 function renderInlineFormatting(text: string, variant: 'user' | 'assistant'): ReactNode[] {

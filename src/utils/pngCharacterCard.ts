@@ -1,7 +1,12 @@
 import type { Character } from '../types/chat';
 import { readImageFileAsDataUrl } from './imageUpload';
+import { sanitizeRenderedText } from './sanitize';
 
 const PNG_SIGNATURE = [137, 80, 78, 71, 13, 10, 26, 10];
+const MAX_PNG_FILE_BYTES = 15 * 1024 * 1024;
+const MAX_METADATA_CHUNK_BYTES = 4 * 1024 * 1024;
+const MAX_COMPRESSED_CHUNK_BYTES = 2 * 1024 * 1024;
+const MAX_DECOMPRESSED_BYTES = 2 * 1024 * 1024;
 
 interface RawTavernCardData {
   name?: unknown;
@@ -26,6 +31,8 @@ function isPngSignature(bytes: Uint8Array): boolean {
   return true;
 }
 
+class DecompressionLimitError extends Error {}
+
 async function decompressWithFormat(
   bytes: Uint8Array,
   format: 'deflate' | 'deflate-raw'
@@ -33,13 +40,45 @@ async function decompressWithFormat(
   if (typeof DecompressionStream === 'undefined') {
     throw new Error('DecompressionStream unavailable');
   }
+  if (bytes.byteLength > MAX_COMPRESSED_CHUNK_BYTES) {
+    throw new DecompressionLimitError(
+      'Compressed PNG metadata chunk exceeds safety size limit.'
+    );
+  }
   const copy = new Uint8Array(bytes.byteLength);
   copy.set(bytes);
   const stream = new Blob([copy.buffer])
     .stream()
     .pipeThrough(new DecompressionStream(format));
-  const buffer = await new Response(stream).arrayBuffer();
-  return new Uint8Array(buffer);
+  const reader = stream.getReader();
+  const chunks: Uint8Array[] = [];
+  let totalBytes = 0;
+
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      if (!value) continue;
+      totalBytes += value.byteLength;
+      if (totalBytes > MAX_DECOMPRESSED_BYTES) {
+        await reader.cancel();
+        throw new DecompressionLimitError(
+          'Decompressed PNG character metadata exceeds the 2 MB safety limit.'
+        );
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  const combined = new Uint8Array(totalBytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    combined.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return combined;
 }
 
 async function inflateZlibBytes(
@@ -51,13 +90,15 @@ async function inflateZlibBytes(
 
   try {
     return await decompressWithFormat(compressed, 'deflate');
-  } catch {
+  } catch (err) {
+    if (err instanceof DecompressionLimitError) throw err;
     // Fallback for raw deflate streams or truncated zlib trailers
   }
 
   try {
     return await decompressWithFormat(compressed, 'deflate-raw');
-  } catch {
+  } catch (err) {
+    if (err instanceof DecompressionLimitError) throw err;
     // Try stripping standard 2-byte zlib header + optional 4-byte Adler32 trailer
   }
 
@@ -67,7 +108,8 @@ async function inflateZlibBytes(
         compressed.subarray(2, compressed.length - 4),
         'deflate-raw'
       );
-    } catch {
+    } catch (err) {
+      if (err instanceof DecompressionLimitError) throw err;
       // ignore invalid deflate payload
     }
   }
@@ -141,8 +183,9 @@ function tryParseCardJson(rawText: string): Record<string, unknown> | null {
   return null;
 }
 
-function cleanString(value: unknown): string {
-  return typeof value === 'string' ? value.trim() : '';
+function cleanString(value: unknown, maxLength = 20000): string {
+  if (typeof value !== 'string') return '';
+  return sanitizeRenderedText(value).trim().slice(0, maxLength);
 }
 
 function replacePlaceholders(text: string, charName: string): string {
@@ -218,6 +261,12 @@ function buildSystemPromptFromCard(
 }
 
 export async function parsePngCharacterCard(file: File): Promise<Character> {
+  if (file.size > MAX_PNG_FILE_BYTES) {
+    throw new Error(
+      'Selected PNG character card exceeds the 15 MB maximum file size.'
+    );
+  }
+
   const buffer = await file.arrayBuffer();
   const bytes = new Uint8Array(buffer);
 
@@ -247,6 +296,15 @@ export async function parsePngCharacterCard(file: File): Promise<Character> {
 
     const dataEnd = dataStart + length;
     const chunkData = bytes.subarray(dataStart, dataEnd);
+
+    if (
+      (type === 'tEXt' || type === 'zTXt' || type === 'iTXt') &&
+      length > MAX_METADATA_CHUNK_BYTES
+    ) {
+      throw new Error(
+        'PNG character metadata chunk exceeds the 4 MB safety limit.'
+      );
+    }
 
     if (type === 'tEXt') {
       const nullIdx = chunkData.indexOf(0);
@@ -383,21 +441,23 @@ export async function parsePngCharacterCard(file: File): Promise<Character> {
   ) as RawTavernCardData;
 
   const fallbackFileName =
-    file.name.replace(/\.png$/i, '').trim() || 'Imported Character';
+    sanitizeRenderedText(file.name.replace(/\.png$/i, '')).trim().slice(0, 100) ||
+    'Imported Character';
   const charName =
-    cleanString(cardData.name) ||
-    cleanString(cardData.nickname) ||
+    cleanString(cardData.name, 100) ||
+    cleanString(cardData.nickname, 100) ||
     fallbackFileName;
 
   const rawTags = Array.isArray(cardData.tags)
     ? cardData.tags
         .filter((t): t is string => typeof t === 'string' && t.trim().length > 0)
-        .map((t) => t.trim())
+        .map((t) => sanitizeRenderedText(t).trim().slice(0, 40))
+        .filter(Boolean)
         .slice(0, 5)
     : [];
 
   const tags = rawTags.length > 0 ? rawTags : ['Tavern Card'];
-  const role = rawTags[0] || 'Imported Persona';
+  const role = (rawTags[0] || 'Imported Persona').slice(0, 80);
 
   const alternateGreeting = Array.isArray(cardData.alternate_greetings)
     ? cardData.alternate_greetings.find(
@@ -405,13 +465,16 @@ export async function parsePngCharacterCard(file: File): Promise<Character> {
       )
     : undefined;
   const rawGreeting =
-    cleanString(cardData.first_mes) || cleanString(alternateGreeting);
+    cleanString(cardData.first_mes, 6000) || cleanString(alternateGreeting, 6000);
   const greeting = rawGreeting
-    ? replacePlaceholders(rawGreeting, charName)
+    ? replacePlaceholders(rawGreeting, charName).slice(0, 6000)
     : `*${charName} looks up as you step closer.* What brings you here?`;
 
   const bio = buildBioFromCard(cardData, charName);
-  const systemPrompt = buildSystemPromptFromCard(cardData, charName);
+  const systemPrompt = buildSystemPromptFromCard(cardData, charName).slice(
+    0,
+    20000
+  );
   const portraitDataUrl = await readImageFileAsDataUrl(file, 1280, 0.85);
 
   return {

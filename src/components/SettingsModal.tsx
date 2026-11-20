@@ -83,7 +83,11 @@ interface SettingsModalProps {
   onExportBackup: () => number;
   onImportBackup: (
     file: File
-  ) => Promise<{ charCount: number; chatCount: number }>;
+  ) => Promise<{
+    charCount: number;
+    chatCount: number;
+    apiKeyCleared?: boolean;
+  }>;
   onReplayGrandIntro: () => void;
 }
 
@@ -179,12 +183,13 @@ export function SettingsModal({
   );
   const [isImportingBackup, setIsImportingBackup] = useState(false);
   const [backupNotice, setBackupNotice] = useState<{
-    type: 'success' | 'error';
+    type: 'success' | 'warning' | 'error';
     message: string;
   } | null>(null);
   const backupInputRef = useRef<HTMLInputElement | null>(null);
   const personaNameInputRef = useRef<HTMLInputElement | null>(null);
   const urlInputRef = useRef<HTMLInputElement | null>(null);
+  const wasOpenRef = useRef(false);
 
   const [isRunningDiag, setIsRunningDiag] = useState(false);
   const [diag, setDiag] = useState<DiagnosticReport>({
@@ -307,7 +312,13 @@ export function SettingsModal({
   );
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen) {
+      wasOpenRef.current = false;
+      return;
+    }
+    const justOpened = !wasOpenRef.current;
+    wasOpenRef.current = true;
+
     const initialProvider: ApiProvider =
       settings.provider === 'openai' ? 'openai' : 'ollama';
     const initialUrl =
@@ -337,13 +348,16 @@ export function SettingsModal({
     setPersonaName(userPersona.name);
     setPersonaAppearance(userPersona.appearance);
     setPersonaBio(userPersona.bio);
-    setFetchError(null);
-    setFetchSuccessMessage(null);
-    setBackupNotice(null);
-    setActiveTab(focusSection === 'persona' ? 'data' : 'connection');
-    void runDiagnostics(initialProvider, initialUrl, settings.apiKey);
 
-    if (focusSection === 'persona') {
+    if (justOpened) {
+      setFetchError(null);
+      setFetchSuccessMessage(null);
+      setBackupNotice(null);
+      setActiveTab(focusSection === 'persona' ? 'data' : 'connection');
+      void runDiagnostics(initialProvider, initialUrl, settings.apiKey);
+    }
+
+    if (justOpened && focusSection === 'persona') {
       const timer = window.setTimeout(() => {
         personaNameInputRef.current?.focus();
       }, 60);
@@ -531,10 +545,17 @@ export function SettingsModal({
     setBackupNotice(null);
     try {
       const result = await onImportBackup(file);
-      setBackupNotice({
-        type: 'success',
-        message: t.backupImportSuccess(result.charCount, result.chatCount),
-      });
+      if (result.apiKeyCleared) {
+        setBackupNotice({
+          type: 'warning',
+          message: `${t.backupImportSuccess(result.charCount, result.chatCount)} ${t.backupApiKeyClearedWarning}`,
+        });
+      } else {
+        setBackupNotice({
+          type: 'success',
+          message: t.backupImportSuccess(result.charCount, result.chatCount),
+        });
+      }
     } catch {
       setBackupNotice({
         type: 'error',
@@ -1818,11 +1839,15 @@ export function SettingsModal({
                       className={`mt-3 flex items-start gap-2.5 rounded-2xl border p-3 text-xs leading-relaxed ${
                         backupNotice.type === 'error'
                           ? 'border-rose-500/35 bg-rose-950/60 text-rose-100'
-                          : 'border-emerald-500/35 bg-emerald-950/55 text-emerald-100'
+                          : backupNotice.type === 'warning'
+                            ? 'border-amber-400/35 bg-amber-950/60 text-amber-100'
+                            : 'border-emerald-500/35 bg-emerald-950/55 text-emerald-100'
                       }`}
                     >
                       {backupNotice.type === 'error' ? (
                         <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-rose-300" />
+                      ) : backupNotice.type === 'warning' ? (
+                        <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-300" />
                       ) : (
                         <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-300" />
                       )}
