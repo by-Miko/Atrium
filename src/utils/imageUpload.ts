@@ -33,7 +33,8 @@ export function sanitizeImageUrl(rawUrl: unknown): string | undefined {
     if (
       parsed.protocol === 'https:' ||
       parsed.protocol === 'http:' ||
-      parsed.protocol === 'blob:'
+      parsed.protocol === 'blob:' ||
+      parsed.protocol === 'file:'
     ) {
       return trimmed;
     }
