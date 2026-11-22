@@ -87,4 +87,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('atrium:secret-encrypt', plaintext),
   decryptSecret: (encryptedPayload) =>
     ipcRenderer.invoke('atrium:secret-decrypt', encryptedPayload),
+  startMobileLink: (options) =>
+    ipcRenderer.invoke('atrium:mobile-link-start', options),
+  stopMobileLink: () => ipcRenderer.invoke('atrium:mobile-link-stop'),
+  getMobileLinkStatus: () => ipcRenderer.invoke('atrium:mobile-link-status'),
 });

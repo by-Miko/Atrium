@@ -1,53 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { Language } from '../types/chat';
-
-interface ElectronSpeechResult {
-  text: string;
-  isFinal: boolean;
-}
-
-interface ElectronSpeechError {
-  code: string;
-  detail?: string;
-}
-
-interface ElectronStartResponse {
-  ok: boolean;
-  fallbackToWebSpeech?: boolean;
-  errorCode?: string;
-  detail?: string;
-}
-
-export interface ElectronSecretEncryptResponse {
-  ok: boolean;
-  encrypted?: string;
-  fallbackSessionOnly?: boolean;
-}
-
-export interface ElectronSecretDecryptResponse {
-  ok: boolean;
-  plaintext?: string;
-}
-
-interface ElectronSpeechAPI {
-  isElectron?: boolean;
-  platform?: string;
-  startNativeDictation?: (language: Language) => Promise<ElectronStartResponse>;
-  stopNativeDictation?: () => Promise<{ ok: boolean }>;
-  onDictationResult?: (cb: (payload: ElectronSpeechResult) => void) => () => void;
-  onDictationError?: (cb: (payload: ElectronSpeechError) => void) => () => void;
-  onDictationEnd?: (cb: () => void) => () => void;
-  encryptSecret?: (plaintext: string) => Promise<ElectronSecretEncryptResponse>;
-  decryptSecret?: (
-    encryptedPayload: string
-  ) => Promise<ElectronSecretDecryptResponse>;
-}
-
-declare global {
-  interface Window {
-    electronAPI?: ElectronSpeechAPI;
-  }
-}
+import type { ElectronAPI, Language } from '../types/chat';
 
 interface SpeechRecognitionAlternativeLike {
   transcript: string;
@@ -86,7 +38,7 @@ interface SpeechRecognitionInstance extends EventTarget {
 
 type SpeechRecognitionConstructor = new () => SpeechRecognitionInstance;
 
-function getNativeElectronSpeechAPI(): ElectronSpeechAPI | null {
+function getNativeElectronSpeechAPI(): ElectronAPI | null {
   if (typeof window === 'undefined') return null;
   const api = window.electronAPI;
   if (

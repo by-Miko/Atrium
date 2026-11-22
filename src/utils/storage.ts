@@ -38,6 +38,7 @@ export const STORAGE_KEYS = {
   wallpaperFit: 'atrium.wallpaperFit.v1',
   parallaxEnabled: 'atrium.parallaxEnabled.v1',
   visualSettings: 'atrium.visualSettings.v1',
+  mobileSyncUpdatedAt: 'atrium.mobileSyncUpdatedAt.v1',
 } as const;
 
 const IDB_NAME = 'atrium-db';
@@ -246,6 +247,28 @@ function readLegacyLocalStorage<T>(key: string): T | undefined {
   }
 }
 
+function sanitizeSyncedAssetUrl(
+  rawUrl: string | undefined,
+  fallbackUrl: string | undefined
+): string | undefined {
+  const safe = sanitizeImageUrl(rawUrl);
+  if (!safe) return fallbackUrl;
+
+  if (
+    typeof window !== 'undefined' &&
+    window.location.protocol !== 'file:' &&
+    safe.startsWith('file:')
+  ) {
+    const assetsIdx = safe.lastIndexOf('/assets/');
+    if (assetsIdx !== -1) {
+      return `.${safe.slice(assetsIdx)}`;
+    }
+    return fallbackUrl;
+  }
+
+  return safe;
+}
+
 export function hydrateCharacters(saved: Character[] | undefined): Character[] {
   if (!Array.isArray(saved) || saved.length === 0) {
     return DEFAULT_CHARACTERS;
@@ -255,11 +278,15 @@ export function hydrateCharacters(saved: Character[] | undefined): Character[] {
     const fallback = defaultsById.get(char.id);
     return {
       ...char,
-      imageUrl: sanitizeImageUrl(char.imageUrl) || fallback?.imageUrl,
-      stageBackground:
-        sanitizeImageUrl(char.stageBackground) || fallback?.stageBackground,
-      wallpaperUrl:
-        sanitizeImageUrl(char.wallpaperUrl) || fallback?.wallpaperUrl,
+      imageUrl: sanitizeSyncedAssetUrl(char.imageUrl, fallback?.imageUrl),
+      stageBackground: sanitizeSyncedAssetUrl(
+        char.stageBackground,
+        fallback?.stageBackground
+      ),
+      wallpaperUrl: sanitizeSyncedAssetUrl(
+        char.wallpaperUrl,
+        fallback?.wallpaperUrl
+      ),
       greeting:
         char.greeting ||
         fallback?.greeting ||
@@ -576,4 +603,14 @@ export async function loadAllPersistedState(): Promise<PersistedAppState> {
     parallaxEnabled,
     visualSettings,
   };
+}
+
+export async function loadMobileSyncUpdatedAt(): Promise<number> {
+  const val = await idbGet<number>(STORAGE_KEYS.mobileSyncUpdatedAt);
+  return typeof val === 'number' && Number.isFinite(val) && val > 0 ? val : 0;
+}
+
+export async function saveMobileSyncUpdatedAt(updatedAt: number): Promise<void> {
+  if (!Number.isFinite(updatedAt) || updatedAt <= 0) return;
+  await idbSet(STORAGE_KEYS.mobileSyncUpdatedAt, updatedAt);
 }

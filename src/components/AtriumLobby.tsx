@@ -7,6 +7,7 @@ import {
   Plus,
   Search,
   Settings,
+  Smartphone,
   User,
   X,
 } from 'lucide-react';
@@ -38,6 +39,8 @@ interface AtriumLobbyProps {
   onOpenUserPersona: () => void;
   onOpenSettings: () => void;
   onOpenOllamaSetup: () => void;
+  mobileLinkActive?: boolean;
+  onOpenMobileLink?: () => void;
   onExit: () => void;
 }
 
@@ -109,7 +112,7 @@ function LobbyCharacterCard({
       style={{
         willChange: introDone && !hasEntered ? 'transform, opacity' : 'auto',
       }}
-      className={`group relative aspect-[2/3] overflow-hidden rounded-[26px] border bg-[var(--theme-glass)] backdrop-blur-md transition-all duration-700 ease-in-out ${
+      className={`group mobile-card-blur relative aspect-[3/4] overflow-hidden rounded-[20px] border bg-[var(--theme-glass)] backdrop-blur-md transition-all duration-700 ease-in-out sm:aspect-[2/3] sm:rounded-[26px] ${
         isRecent
           ? 'border-white/20 hover:border-amber-300/75 hover:shadow-[0_0_0_1px_rgba(253,230,138,0.35),0_20px_50px_rgba(245,158,11,0.16),0_18px_40px_rgba(0,0,0,0.65)]'
           : 'border-[rgba(255,255,255,0.12)] hover:border-amber-300/70 hover:shadow-[0_0_0_1px_rgba(253,230,138,0.32),0_20px_50px_rgba(245,158,11,0.14),0_18px_40px_rgba(0,0,0,0.6)]'
@@ -136,13 +139,13 @@ function LobbyCharacterCard({
 
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/95 via-black/40 to-black/15 transition-opacity duration-300 group-hover:via-black/30"
+        className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent transition-opacity duration-300 group-hover:via-black/30 sm:from-black/95 sm:via-black/40 sm:to-black/15"
       />
 
       {/* Crisp 1px top-left Liquid Glass specular edge highlight + subtle warm-gold rim glow on hover */}
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute inset-0 rounded-[26px] p-[1px] opacity-80 transition-opacity duration-300 group-hover:opacity-0"
+        className="pointer-events-none absolute inset-0 rounded-[20px] p-[1px] opacity-80 transition-opacity duration-300 group-hover:opacity-0 sm:rounded-[26px]"
         style={{
           background:
             'linear-gradient(135deg, rgba(255,255,255,0.32) 0%, rgba(255,255,255,0.08) 38%, rgba(255,255,255,0) 70%)',
@@ -155,11 +158,11 @@ function LobbyCharacterCard({
       />
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute inset-0 rounded-[26px] ring-1 ring-inset ring-amber-200/0 transition-all duration-300 group-hover:ring-amber-200/35"
+        className="pointer-events-none absolute inset-0 rounded-[20px] ring-1 ring-inset ring-amber-200/0 transition-all duration-300 group-hover:ring-amber-200/35 sm:rounded-[26px]"
       />
 
-      <div className="pointer-events-none absolute inset-x-4 top-4 z-10 flex items-center justify-between gap-2">
-        <div className="min-w-0 text-[11px] font-medium text-white/80 drop-shadow">
+      <div className="pointer-events-none absolute inset-x-3 top-3 z-10 flex items-center justify-between gap-1.5 sm:inset-x-4 sm:top-4 sm:gap-2">
+        <div className="min-w-0 text-[10px] font-medium text-white/80 drop-shadow sm:text-[11px]">
           {messageCount > 0 ? (
             <span className="tabular-nums text-white/80">
               {messageCount} {messageCount === 1 ? t.msgSingular : t.msgPlural}
@@ -176,7 +179,7 @@ function LobbyCharacterCard({
             }}
             aria-label={`${t.viewCharacterProfile}: ${safeName}`}
             title={`${t.viewCharacterProfile}: ${safeName}`}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/15 bg-black/50 text-white/80 opacity-85 backdrop-blur-md transition-all hover:border-amber-300/50 hover:bg-black/75 hover:text-white focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-[var(--theme-accent)] sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"
+            className="inline-flex h-8 w-8 touch-manipulation items-center justify-center rounded-full border border-white/15 bg-black/50 text-white/80 opacity-85 backdrop-blur-md transition-all hover:border-amber-300/50 hover:bg-black/75 hover:text-white focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-[var(--theme-accent)] sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"
           >
             <Eye className="h-3.5 w-3.5" />
           </button>
@@ -189,7 +192,7 @@ function LobbyCharacterCard({
             }}
             aria-label={`${t.editCharacterTitle}: ${safeName}`}
             title={`${t.editCharacterTitle}: ${safeName}`}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/15 bg-black/50 text-white/80 opacity-85 backdrop-blur-md transition-all hover:border-amber-300/50 hover:bg-black/75 hover:text-white focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-[var(--theme-accent)] sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"
+            className="inline-flex h-8 w-8 touch-manipulation items-center justify-center rounded-full border border-white/15 bg-black/50 text-white/80 opacity-85 backdrop-blur-md transition-all hover:border-amber-300/50 hover:bg-black/75 hover:text-white focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-[var(--theme-accent)] sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"
           >
             <Pencil className="h-3.5 w-3.5" />
           </button>
@@ -199,23 +202,23 @@ function LobbyCharacterCard({
       <button
         type="button"
         onClick={onEnterScene}
-        className="absolute inset-0 flex flex-col justify-end p-5 text-left focus-visible:outline-2 focus-visible:outline-inset focus-visible:outline-[var(--theme-accent)]"
+        className="absolute inset-0 flex touch-manipulation flex-col justify-end p-3.5 text-left focus-visible:outline-2 focus-visible:outline-inset focus-visible:outline-[var(--theme-accent)] sm:p-5"
       >
         {safeTags.length > 0 ? (
-          <p className="mb-1.5 truncate text-[11px] font-medium text-[var(--theme-accent)] transition-colors group-hover:text-amber-200">
+          <p className="mb-1.5 hidden truncate text-[11px] font-medium text-[var(--theme-accent)] transition-colors group-hover:text-amber-200 sm:block">
             {safeTags.join(' · ')}
           </p>
         ) : null}
 
-        <h2 className="truncate font-display text-lg font-semibold leading-tight text-white">
+        <h2 className="truncate font-display text-base font-semibold leading-tight text-white sm:text-lg">
           {safeName}
         </h2>
 
-        <p className="mt-0.5 truncate text-xs font-medium text-white/75">
+        <p className="mt-0.5 line-clamp-1 text-xs font-medium text-white/75">
           {safeRole}
         </p>
 
-        <p className="mt-2 line-clamp-2 text-[13px] leading-snug text-white/80">
+        <p className="mt-2 hidden text-[13px] leading-snug text-white/80 sm:line-clamp-2 sm:block">
           {safeBio}
         </p>
       </button>
@@ -243,6 +246,8 @@ export function AtriumLobby({
   onOpenUserPersona,
   onOpenSettings,
   onOpenOllamaSetup,
+  mobileLinkActive = false,
+  onOpenMobileLink,
   onExit,
 }: AtriumLobbyProps) {
   const [searchQuery, setSearchQuery] = useState('');
@@ -309,7 +314,7 @@ export function AtriumLobby({
       {/* Dynamic Theme-Synced Liquid Glass Flow Background (14s–18s continuous swirl) */}
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute inset-0 z-0 overflow-hidden"
+        className="pointer-events-none absolute inset-0 z-0 hidden overflow-hidden sm:block"
       >
         <div
           className="absolute -top-32 -left-24 h-[620px] w-[620px] rounded-full blur-[110px] transition-colors duration-700 ease-in-out"
@@ -353,8 +358,8 @@ export function AtriumLobby({
       </div>
 
       {/* Top Spatial Header */}
-      <header className="relative z-20 shrink-0 border-b border-[rgba(255,255,255,0.12)] bg-[var(--theme-glass)] backdrop-blur-2xl transition-colors duration-700 ease-in-out">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-5 py-3.5 sm:px-8">
+      <header className="pt-safe relative z-20 shrink-0 border-b border-[rgba(255,255,255,0.12)] bg-[var(--theme-glass)] backdrop-blur-2xl transition-colors duration-700 ease-in-out sm:pt-0">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-2 px-4 py-3 sm:gap-4 sm:px-8 sm:py-3.5">
           {/* Left: Living Atrium Logo Mark + Wordmark */}
           <div className="flex items-center gap-2.5 shrink-0">
             <svg
@@ -433,15 +438,18 @@ export function AtriumLobby({
           </div>
 
           {/* Right: Liquid Glass Pills (Engine Status, User Persona, Settings, Exit) */}
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-1.5 shrink-0 sm:gap-2">
             {provider === 'openai' ? (
               <button
                 type="button"
                 onClick={onOpenSettings}
+                aria-label={
+                  selectedModel.trim() ? t.apiStatusReady : t.apiStatusSetup
+                }
                 title={
                   selectedModel.trim() ? t.apiStatusReady : t.apiStatusSetup
                 }
-                className={`inline-flex h-9 items-center gap-2 rounded-full border px-3 text-xs font-medium shadow-[inset_1px_1px_0_rgba(255,255,255,0.16)] backdrop-blur-xl transition-all duration-700 ease-in-out focus-visible:outline-2 focus-visible:outline-[var(--theme-accent)] whitespace-nowrap shrink-0 ${
+                className={`inline-flex h-10 w-10 touch-manipulation items-center justify-center gap-2 rounded-full border px-0 text-xs font-medium shadow-[inset_1px_1px_0_rgba(255,255,255,0.16)] backdrop-blur-xl transition-all duration-700 ease-in-out focus-visible:outline-2 focus-visible:outline-[var(--theme-accent)] whitespace-nowrap shrink-0 sm:h-9 sm:w-auto sm:px-3 ${
                   selectedModel.trim()
                     ? 'border-[rgba(255,255,255,0.12)] bg-[var(--theme-glass)] text-white/90 hover:border-emerald-300/40 hover:bg-[var(--theme-glass-hover)]'
                     : 'border-amber-300/35 bg-amber-500/[0.12] text-amber-100 hover:border-amber-300/65 hover:bg-amber-500/[0.2]'
@@ -465,6 +473,13 @@ export function AtriumLobby({
                 onClick={
                   ollamaStatus === 'offline' ? onOpenOllamaSetup : onOpenSettings
                 }
+                aria-label={
+                  ollamaStatus === 'offline'
+                    ? t.ollamaStatusOffline
+                    : ollamaStatus === 'connected'
+                      ? t.ollamaStatusReady
+                      : t.ollamaStatusChecking
+                }
                 title={
                   ollamaStatus === 'offline'
                     ? t.ollamaStatusOffline
@@ -472,7 +487,7 @@ export function AtriumLobby({
                       ? t.ollamaStatusReady
                       : t.ollamaStatusChecking
                 }
-                className={`inline-flex h-9 items-center gap-2 rounded-full border px-3 text-xs font-medium shadow-[inset_1px_1px_0_rgba(255,255,255,0.16)] backdrop-blur-xl transition-colors duration-700 ease-in-out focus-visible:outline-2 focus-visible:outline-[var(--theme-accent)] whitespace-nowrap shrink-0 ${
+                className={`inline-flex h-10 w-10 touch-manipulation items-center justify-center gap-2 rounded-full border px-0 text-xs font-medium shadow-[inset_1px_1px_0_rgba(255,255,255,0.16)] backdrop-blur-xl transition-colors duration-700 ease-in-out focus-visible:outline-2 focus-visible:outline-[var(--theme-accent)] whitespace-nowrap shrink-0 sm:h-9 sm:w-auto sm:px-3 ${
                   ollamaStatus === 'offline'
                     ? 'border-amber-300/35 bg-amber-500/[0.12] text-amber-100 hover:border-amber-300/65 hover:bg-amber-500/[0.2]'
                     : ollamaStatus === 'connected'
@@ -500,20 +515,46 @@ export function AtriumLobby({
               </button>
             )}
 
+            {typeof window !== 'undefined' &&
+            Boolean(window.electronAPI?.startMobileLink) &&
+            onOpenMobileLink ? (
+              <button
+                type="button"
+                onClick={onOpenMobileLink}
+                aria-label={t.mobileLinkTitle}
+                title={t.mobileLinkTitle}
+                className={`hidden sm:inline-flex h-9 touch-manipulation items-center justify-center gap-1.5 rounded-full border px-3 text-xs font-medium shadow-[inset_1px_1px_0_rgba(255,255,255,0.16)] backdrop-blur-xl transition-colors duration-700 ease-in-out focus-visible:outline-2 focus-visible:outline-[var(--theme-accent)] whitespace-nowrap shrink-0 ${
+                  mobileLinkActive
+                    ? 'border-emerald-300/40 bg-emerald-500/[0.14] text-emerald-100 hover:border-emerald-300/65 hover:bg-emerald-500/[0.22]'
+                    : 'border-[rgba(255,255,255,0.12)] bg-[var(--theme-glass)] text-white/90 hover:bg-[var(--theme-glass-hover)] hover:text-white'
+                }`}
+              >
+                <Smartphone className="h-3.5 w-3.5 text-[var(--theme-accent)]" />
+                <span>{t.mobileLinkButton}</span>
+                {mobileLinkActive ? (
+                  <span
+                    aria-hidden="true"
+                    className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.9)]"
+                  />
+                ) : null}
+              </button>
+            ) : null}
+
             <PWAInstallButton t={t} compact />
 
             <button
               type="button"
               onClick={onOpenUserPersona}
+              aria-label={t.userPersonaTooltip}
               title={t.userPersonaTooltip}
-              className={`inline-flex h-9 items-center gap-1.5 rounded-full border px-3.5 text-xs font-medium shadow-[inset_1px_1px_0_rgba(255,255,255,0.16)] backdrop-blur-xl transition-colors duration-700 ease-in-out focus-visible:outline-2 focus-visible:outline-[var(--theme-accent)] whitespace-nowrap shrink-0 ${
+              className={`inline-flex h-10 w-10 touch-manipulation items-center justify-center gap-1.5 rounded-full border px-0 text-xs font-medium shadow-[inset_1px_1px_0_rgba(255,255,255,0.16)] backdrop-blur-xl transition-colors duration-700 ease-in-out focus-visible:outline-2 focus-visible:outline-[var(--theme-accent)] whitespace-nowrap shrink-0 sm:h-9 sm:w-auto sm:px-3.5 ${
                 hasPersonaName
                   ? 'border-[var(--theme-accent)]/45 bg-[var(--theme-accent-soft)] text-white hover:border-[var(--theme-accent)]'
                   : 'border-[rgba(255,255,255,0.12)] bg-[var(--theme-glass)] text-white/85 hover:bg-[var(--theme-glass-hover)] hover:text-white'
               }`}
             >
-              <User className="h-3.5 w-3.5 text-[var(--theme-accent)]" />
-              <span className="max-w-[110px] truncate">
+              <User className="h-4 w-4 text-[var(--theme-accent)] sm:h-3.5 sm:w-3.5" />
+              <span className="hidden max-w-[110px] truncate sm:inline">
                 {t.userPersonaBadgeLabel(userPersona.name)}
               </span>
             </button>
@@ -521,18 +562,22 @@ export function AtriumLobby({
             <button
               type="button"
               onClick={onOpenSettings}
-              className="inline-flex h-9 items-center gap-1.5 rounded-full border border-[rgba(255,255,255,0.12)] bg-[var(--theme-glass)] px-3.5 text-xs font-medium text-white/90 shadow-[inset_1px_1px_0_rgba(255,255,255,0.16)] backdrop-blur-xl transition-colors duration-700 ease-in-out hover:bg-[var(--theme-glass-hover)] hover:text-white focus-visible:outline-2 focus-visible:outline-[var(--theme-accent)] whitespace-nowrap shrink-0"
+              aria-label={t.settingsButton}
+              title={t.settingsButton}
+              className="inline-flex h-10 w-10 touch-manipulation items-center justify-center gap-1.5 rounded-full border border-[rgba(255,255,255,0.12)] bg-[var(--theme-glass)] px-0 text-xs font-medium text-white/90 shadow-[inset_1px_1px_0_rgba(255,255,255,0.16)] backdrop-blur-xl transition-colors duration-700 ease-in-out hover:bg-[var(--theme-glass-hover)] hover:text-white focus-visible:outline-2 focus-visible:outline-[var(--theme-accent)] whitespace-nowrap shrink-0 sm:h-9 sm:w-auto sm:px-3.5"
             >
-              <Settings className="h-3.5 w-3.5 text-[var(--theme-accent)]" />
+              <Settings className="h-4 w-4 text-[var(--theme-accent)] sm:h-3.5 sm:w-3.5" />
               <span className="hidden sm:inline">{t.settingsButton}</span>
             </button>
 
             <button
               type="button"
               onClick={onExit}
-              className="inline-flex h-9 items-center gap-1.5 rounded-full border border-[rgba(255,255,255,0.12)] bg-[var(--theme-glass)] px-3.5 text-xs font-medium text-white/75 shadow-[inset_1px_1px_0_rgba(255,255,255,0.14)] backdrop-blur-xl transition-colors duration-700 ease-in-out hover:border-white/25 hover:bg-[var(--theme-glass-hover)] hover:text-white focus-visible:outline-2 focus-visible:outline-[var(--theme-accent)] whitespace-nowrap shrink-0"
+              aria-label={t.lobbyExitButton}
+              title={t.lobbyExitButton}
+              className="inline-flex h-10 w-10 touch-manipulation items-center justify-center gap-1.5 rounded-full border border-[rgba(255,255,255,0.12)] bg-[var(--theme-glass)] px-0 text-xs font-medium text-white/75 shadow-[inset_1px_1px_0_rgba(255,255,255,0.14)] backdrop-blur-xl transition-colors duration-700 ease-in-out hover:border-white/25 hover:bg-[var(--theme-glass-hover)] hover:text-white focus-visible:outline-2 focus-visible:outline-[var(--theme-accent)] whitespace-nowrap shrink-0 sm:h-9 sm:w-auto sm:px-3.5"
             >
-              <LogOut className="h-3.5 w-3.5" />
+              <LogOut className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
               <span className="hidden sm:inline">{t.lobbyExitButton}</span>
             </button>
           </div>
@@ -627,7 +672,7 @@ export function AtriumLobby({
             </label>
 
             {allTags.length > 1 ? (
-              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:flex-wrap sm:overflow-visible sm:pb-0">
+              <div className="no-scrollbar flex flex-nowrap snap-x items-center gap-2 overflow-x-auto pb-1 sm:flex-wrap sm:gap-1.5 sm:overflow-visible sm:pb-0">
                 {allTags.map((tag) => {
                   const selected = activeTag === tag;
                   const label =
@@ -637,7 +682,7 @@ export function AtriumLobby({
                       key={tag}
                       type="button"
                       onClick={() => setActiveTag(tag)}
-                      className={`rounded-xl border px-3 py-1.5 text-xs font-medium backdrop-blur-md transition-colors duration-700 ease-in-out whitespace-nowrap shrink-0 ${
+                      className={`snap-start touch-manipulation rounded-xl border px-3 py-1.5 text-xs font-medium backdrop-blur-md transition-colors duration-700 ease-in-out whitespace-nowrap shrink-0 ${
                         selected
                           ? 'border-[var(--theme-accent)]/45 bg-[var(--theme-accent-soft)] text-[var(--theme-accent)] shadow-[inset_0_1px_0_rgba(255,255,255,0.16)]'
                           : 'border-[rgba(255,255,255,0.12)] bg-[var(--theme-glass)] text-[var(--theme-muted)] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] hover:bg-[var(--theme-glass-hover)] hover:text-white'
@@ -663,7 +708,7 @@ export function AtriumLobby({
               </p>
             </div>
           ) : (
-            <div className="mt-6 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-5 lg:grid-cols-3 xl:grid-cols-4 pb-safe sm:pb-0">
               {filteredCharacters.map((char, index) => (
                 <LobbyCharacterCard
                   key={char.id}

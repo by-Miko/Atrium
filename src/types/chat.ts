@@ -111,3 +111,100 @@ export interface VisualStudioSettings {
   customDialogueColor?: string;
   customActionColor?: string;
 }
+
+export interface MobileLinkUrls {
+  lan: string[];
+  tailscale: string[];
+}
+
+export interface MobileLinkStatus {
+  active: boolean;
+  port: number | null;
+  token: string | null;
+  urls: MobileLinkUrls;
+  connectedClients: number;
+  lastSyncAt: number | null;
+}
+
+export interface MobileSyncPreferences {
+  activeCharacterId?: string;
+  userPersona?: UserPersona;
+  themeId?: ThemeId;
+  bubbleSchemeId?: BubbleSchemeId;
+  language?: Language;
+  wallpaperFit?: WallpaperFitMode;
+  parallaxEnabled?: boolean;
+  visualSettings?: VisualStudioSettings;
+  settings?: {
+    provider?: ApiProvider;
+    openaiBaseUrl?: string;
+    selectedModel?: string;
+    availableModels?: OllamaModelTag[];
+    temperature?: number;
+    numPredict?: number;
+    numCtx?: number;
+    storyMemoryEnabled?: boolean;
+  };
+}
+
+export interface MobileSyncStatePayload {
+  updatedAt: number;
+  characters: Character[];
+  chats: Record<string, ChatMessage[]>;
+  storyMemory: Record<string, StoryMemoryEntry>;
+  preferences: MobileSyncPreferences;
+}
+
+export interface ElectronSpeechResult {
+  text: string;
+  isFinal: boolean;
+}
+
+export interface ElectronSpeechError {
+  code: string;
+  detail?: string;
+}
+
+export interface ElectronStartResponse {
+  ok: boolean;
+  fallbackToWebSpeech?: boolean;
+  errorCode?: string;
+  detail?: string;
+}
+
+export interface ElectronSecretEncryptResponse {
+  ok: boolean;
+  encrypted?: string;
+  fallbackSessionOnly?: boolean;
+}
+
+export interface ElectronSecretDecryptResponse {
+  ok: boolean;
+  plaintext?: string;
+}
+
+export interface ElectronAPI {
+  isElectron?: boolean;
+  platform?: string;
+  closeWindow?: () => void;
+  startNativeDictation?: (language: Language) => Promise<ElectronStartResponse>;
+  stopNativeDictation?: () => Promise<{ ok: boolean }>;
+  onDictationResult?: (cb: (payload: ElectronSpeechResult) => void) => () => void;
+  onDictationError?: (cb: (payload: ElectronSpeechError) => void) => () => void;
+  onDictationEnd?: (cb: () => void) => () => void;
+  encryptSecret?: (plaintext: string) => Promise<ElectronSecretEncryptResponse>;
+  decryptSecret?: (
+    encryptedPayload: string
+  ) => Promise<ElectronSecretDecryptResponse>;
+  startMobileLink?: (options?: {
+    forceRotate?: boolean;
+  }) => Promise<MobileLinkStatus>;
+  stopMobileLink?: () => Promise<MobileLinkStatus>;
+  getMobileLinkStatus?: () => Promise<MobileLinkStatus>;
+}
+
+declare global {
+  interface Window {
+    electronAPI?: ElectronAPI;
+  }
+}

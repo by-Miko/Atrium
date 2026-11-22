@@ -12,6 +12,7 @@ import { ChatWindow } from './components/ChatWindow';
 import { GrandIntroSplash } from './components/GrandIntroSplash';
 import { ImageLightbox } from './components/ImageLightbox';
 import { IntroSplash } from './components/IntroSplash';
+import { MobileLinkModal } from './components/MobileLinkModal';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { OllamaSetupHelper } from './components/OllamaSetupHelper';
 import { OutroSplash } from './components/OutroSplash';
@@ -28,6 +29,8 @@ import type {
   Character,
   ChatMessage,
   Language,
+  MobileLinkStatus,
+  MobileSyncStatePayload,
   OllamaSettings,
   StoryMemoryEntry,
   ThemeId,
@@ -40,6 +43,21 @@ import {
   parseAtriumBackupFile,
 } from './utils/backup';
 import {
+  bootstrapMobileLinkSession,
+  buildMobileSyncPayload,
+  computeMobileSyncContentFingerprint,
+  computeMobileSyncSignature,
+  computeMobileSyncStateHash,
+  fetchMobileSyncState,
+  isLocalLoopbackUrl,
+  isPublicHttpsApiUrl,
+  postMobileSyncState,
+  serializeNormalizedSyncPayload,
+  setMobileLinkClientActive,
+} from './utils/mobileSync';
+import {
+  DEFAULT_OLLAMA_URL,
+  DEFAULT_OPENAI_URL,
   fetchProviderModels,
   streamProviderChat,
   summarizeConversationMemory,
@@ -49,9 +67,12 @@ import {
   DEFAULT_USER_PERSONA,
   STORAGE_KEYS,
   hydrateCharacters,
+  hydrateVisualSettings,
   idbSet,
   loadAllPersistedState,
+  loadMobileSyncUpdatedAt,
   saveApiKeySecurely,
+  saveMobileSyncUpdatedAt,
   stripSecretFromSettings,
 } from './utils/storage';
 
@@ -141,6 +162,21 @@ function makeMessageId(): string {
 const GRAND_INTRO_STORAGE_KEY = 'atrium_grand_intro_last_played_at';
 const GRAND_INTRO_INTERVAL_MS = 12 * 60 * 60 * 1000;
 
+const EMPTY_MOBILE_LINK_STATUS: MobileLinkStatus = {
+  active: false,
+  port: null,
+  token: null,
+  urls: { lan: [], tailscale: [] },
+  connectedClients: 0,
+  lastSyncAt: null,
+};
+
+function serializeSyncBody(
+  payload: Omit<MobileSyncStatePayload, 'updatedAt'>
+): string {
+  return computeMobileSyncStateHash(payload);
+}
+
 function resolveInitialIntroMode(): 'grand' | 'quick' {
   try {
     const raw = window.localStorage.getItem(GRAND_INTRO_STORAGE_KEY);
@@ -216,15 +252,48 @@ export default function App() {
   const [showOllamaSetupHelper, setShowOllamaSetupHelper] = useState(false);
   const [isStoryMemoryOpen, setIsStoryMemoryOpen] = useState(false);
 
+  const [initialMobileLinkSession] = useState(() =>
+    bootstrapMobileLinkSession()
+  );
+  const isElectronHost =
+    typeof window !== 'undefined' && Boolean(window.electronAPI?.isElectron);
+  const [isMobileLinkClient, setIsMobileLinkClient] = useState<boolean>(
+    () =>
+      !isElectronHost &&
+      Boolean(
+        initialMobileLinkSession.hadUrlToken || initialMobileLinkSession.token
+      )
+  );
+  const [mobileLinkStatus, setMobileLinkStatus] = useState<MobileLinkStatus>(
+    EMPTY_MOBILE_LINK_STATUS
+  );
+  const [isMobileLinkModalOpen, setIsMobileLinkModalOpen] = useState(false);
+
   const t = TRANSLATIONS[language];
 
   const abortControllerRef = useRef<AbortController | null>(null);
+  const charactersRef = useRef(characters);
+  charactersRef.current = characters;
   const conversationsRef = useRef(conversations);
   conversationsRef.current = conversations;
   const storyMemoriesRef = useRef(storyMemories);
   storyMemoriesRef.current = storyMemories;
   const summarizingCharIdsRef = useRef<Set<string>>(new Set());
   const lastSummaryAttemptCountRef = useRef<Record<string, number>>({});
+  const syncUpdatedAtRef = useRef<number>(0);
+  const hasHydratedForSyncRef = useRef<boolean>(false);
+  const isApplyingRemoteSyncRef = useRef<boolean>(false);
+  const remoteSyncResetTimerRef = useRef<number | null>(null);
+  const pendingPushTimerRef = useRef<number | null>(null);
+  const isSyncRequestInFlightRef = useRef<boolean>(false);
+  const lastSyncedBodyJsonRef = useRef<string>('');
+  const lastAppliedRemoteSignatureRef = useRef<string>('');
+  const lastSyncedFingerprintRef = useRef<string>('');
+  const lastAppliedPayloadRef = useRef<string>('');
+  const isSettingsOpenRef = useRef<boolean>(isSettingsOpen);
+  isSettingsOpenRef.current = isSettingsOpen;
+  const streamingCharIdRef = useRef<string | null>(null);
+  streamingCharIdRef.current = streamingCharacterId;
 
   useEffect(() => {
     if (introMode === 'grand') {
@@ -279,20 +348,404 @@ export default function App() {
     [bubbleSchemeId, themeId, visualSettings]
   );
 
+  const applyRemoteSyncSnapshot = useCallback(
+    (remote: MobileSyncStatePayload, clientMode: boolean) => {
+      if (remote.updatedAt <= syncUpdatedAtRef.current) {
+        return;
+      }
+
+      const remoteSignature = computeMobileSyncSignature(remote);
+      if (remoteSignature === lastAppliedRemoteSignatureRef.current) {
+        return;
+      }
+
+      const normalizedRemoteJson = serializeNormalizedSyncPayload(remote);
+      if (
+        lastAppliedPayloadRef.current &&
+        normalizedRemoteJson === lastAppliedPayloadRef.current
+      ) {
+        lastAppliedRemoteSignatureRef.current = remoteSignature;
+        syncUpdatedAtRef.current = Math.max(
+          syncUpdatedAtRef.current,
+          remote.updatedAt
+        );
+        return;
+      }
+
+      const remoteHash = computeMobileSyncStateHash(remote);
+      if (
+        lastSyncedBodyJsonRef.current &&
+        remoteHash === lastSyncedBodyJsonRef.current
+      ) {
+        lastAppliedPayloadRef.current = normalizedRemoteJson;
+        lastAppliedRemoteSignatureRef.current = remoteSignature;
+        syncUpdatedAtRef.current = remote.updatedAt;
+        return;
+      }
+
+      const cur = latestSyncSnapshotDataRef.current;
+      const localPreview = buildMobileSyncPayload({
+        updatedAt: syncUpdatedAtRef.current,
+        characters: cur.characters,
+        conversations: cur.conversations,
+        storyMemories: cur.storyMemories,
+        preferences: {
+          activeCharacterId: cur.activeCharacterId,
+          userPersona: cur.userPersona,
+          themeId: cur.themeId,
+          bubbleSchemeId: cur.bubbleSchemeId,
+          language: cur.language,
+          wallpaperFit: cur.wallpaperFit,
+          parallaxEnabled: cur.parallaxEnabled,
+          visualSettings: cur.visualSettings,
+          settings: cur.settings,
+        },
+      });
+
+      const ignoreSettings = isSettingsOpenRef.current;
+      const localFingerprint = computeMobileSyncContentFingerprint(localPreview, {
+        ignoreSettingsAndPersona: ignoreSettings,
+      });
+      const remoteFingerprint = computeMobileSyncContentFingerprint(remote, {
+        ignoreSettingsAndPersona: ignoreSettings,
+      });
+
+      if (localFingerprint === remoteFingerprint) {
+        lastAppliedPayloadRef.current = normalizedRemoteJson;
+        lastAppliedRemoteSignatureRef.current = remoteSignature;
+        lastSyncedFingerprintRef.current = localFingerprint;
+        syncUpdatedAtRef.current = remote.updatedAt;
+        return;
+      }
+
+      if (pendingPushTimerRef.current !== null) {
+        window.clearTimeout(pendingPushTimerRef.current);
+        pendingPushTimerRef.current = null;
+      }
+
+      isApplyingRemoteSyncRef.current = true;
+      if (remoteSyncResetTimerRef.current !== null) {
+        window.clearTimeout(remoteSyncResetTimerRef.current);
+      }
+      remoteSyncResetTimerRef.current = window.setTimeout(() => {
+        isApplyingRemoteSyncRef.current = false;
+        remoteSyncResetTimerRef.current = null;
+      }, 150);
+
+      lastAppliedPayloadRef.current = normalizedRemoteJson;
+      lastAppliedRemoteSignatureRef.current = remoteSignature;
+      lastSyncedFingerprintRef.current = remoteFingerprint;
+      syncUpdatedAtRef.current = remote.updatedAt;
+      void saveMobileSyncUpdatedAt(remote.updatedAt);
+
+      const nextChars =
+        Array.isArray(remote.characters) && remote.characters.length > 0
+          ? hydrateCharacters(remote.characters)
+          : null;
+      if (nextChars) {
+        setCharacters(nextChars);
+      }
+
+      const prefs = remote.preferences ?? {};
+      if (
+        typeof prefs.activeCharacterId === 'string' &&
+        prefs.activeCharacterId
+      ) {
+        const candidatePool = nextChars ?? charactersRef.current;
+        if (candidatePool.some((c) => c.id === prefs.activeCharacterId)) {
+          setActiveCharacterId(prefs.activeCharacterId);
+        }
+      }
+
+      if (remote.chats && typeof remote.chats === 'object') {
+        const sanitizedChats: Record<string, ChatMessage[]> = {};
+        for (const [charId, msgs] of Object.entries(remote.chats)) {
+          if (!Array.isArray(msgs)) continue;
+          sanitizedChats[charId] = msgs.map((m) =>
+            m.isStreaming ? { ...m, isStreaming: false } : m
+          );
+        }
+        setConversations(sanitizedChats);
+      }
+
+      if (remote.storyMemory && typeof remote.storyMemory === 'object') {
+        setStoryMemories(remote.storyMemory);
+      }
+
+      if (
+        !isSettingsOpenRef.current &&
+        prefs.userPersona &&
+        typeof prefs.userPersona === 'object'
+      ) {
+        setUserPersona({
+          name:
+            typeof prefs.userPersona.name === 'string'
+              ? prefs.userPersona.name
+              : '',
+          appearance:
+            typeof prefs.userPersona.appearance === 'string'
+              ? prefs.userPersona.appearance
+              : '',
+          bio:
+            typeof prefs.userPersona.bio === 'string'
+              ? prefs.userPersona.bio
+              : '',
+        });
+      }
+
+      if (
+        prefs.themeId === 'obsidian-violet' ||
+        prefs.themeId === 'midnight-crimson' ||
+        prefs.themeId === 'cyber-emerald'
+      ) {
+        setThemeId(prefs.themeId);
+      }
+
+      if (
+        prefs.bubbleSchemeId === 'indigo-violet' ||
+        prefs.bubbleSchemeId === 'crimson-rose' ||
+        prefs.bubbleSchemeId === 'cyber-emerald' ||
+        prefs.bubbleSchemeId === 'ocean-blue' ||
+        prefs.bubbleSchemeId === 'amber-gold' ||
+        prefs.bubbleSchemeId === 'minimalist-glass'
+      ) {
+        setBubbleSchemeId(prefs.bubbleSchemeId);
+      }
+
+      if (prefs.language === 'en' || prefs.language === 'es') {
+        setLanguage(prefs.language);
+      }
+
+      if (
+        prefs.wallpaperFit === 'cover' ||
+        prefs.wallpaperFit === 'contain'
+      ) {
+        setWallpaperFit(prefs.wallpaperFit);
+      }
+
+      if (typeof prefs.parallaxEnabled === 'boolean') {
+        setParallaxEnabled(prefs.parallaxEnabled);
+      }
+
+      if (prefs.visualSettings && typeof prefs.visualSettings === 'object') {
+        setVisualSettings(hydrateVisualSettings(prefs.visualSettings));
+      }
+
+      // Never overwrite user's selected Ollama model or settings while SettingsModal is open
+      if (!isSettingsOpenRef.current) {
+        if (prefs.settings && typeof prefs.settings === 'object') {
+          const remoteSettings = prefs.settings;
+          const remoteProvider =
+            remoteSettings.provider === 'openai' ? 'openai' : 'ollama';
+          const remoteOpenaiUrl =
+            typeof remoteSettings.openaiBaseUrl === 'string'
+              ? remoteSettings.openaiBaseUrl.trim().replace(/\/+$/, '')
+              : undefined;
+          const remoteIsLoopback = isLocalLoopbackUrl(remoteOpenaiUrl);
+          const remoteIsPublicHttps = isPublicHttpsApiUrl(remoteOpenaiUrl);
+
+          setSettings((prev) => {
+            let nextProvider = prev.provider;
+            let nextBaseUrl = prev.baseUrl;
+            let nextOpenaiBaseUrl = prev.openaiBaseUrl;
+
+            if (clientMode) {
+              nextProvider = remoteProvider;
+              if (remoteProvider === 'openai') {
+                nextBaseUrl = remoteIsPublicHttps ? remoteOpenaiUrl! : '/v1';
+              } else {
+                nextBaseUrl = '/api';
+              }
+              if (remoteIsLoopback && remoteOpenaiUrl) {
+                nextOpenaiBaseUrl =
+                  remoteOpenaiUrl === '/v1'
+                    ? 'http://127.0.0.1:1234/v1'
+                    : remoteOpenaiUrl;
+              } else if (remoteIsPublicHttps && remoteOpenaiUrl) {
+                nextOpenaiBaseUrl = remoteOpenaiUrl;
+              }
+            } else {
+              if (remoteProvider !== prev.provider) {
+                nextProvider = remoteProvider;
+                if (remoteProvider === 'ollama') {
+                  nextBaseUrl = DEFAULT_OLLAMA_URL;
+                } else if (remoteIsPublicHttps && remoteOpenaiUrl) {
+                  nextBaseUrl = remoteOpenaiUrl;
+                  nextOpenaiBaseUrl = remoteOpenaiUrl;
+                } else if (remoteIsLoopback && remoteOpenaiUrl) {
+                  const targetOpenaiUrl =
+                    isLocalLoopbackUrl(prev.openaiBaseUrl) &&
+                    prev.openaiBaseUrl &&
+                    remoteOpenaiUrl === 'http://127.0.0.1:1234/v1'
+                      ? prev.openaiBaseUrl
+                      : remoteOpenaiUrl;
+                  nextBaseUrl = targetOpenaiUrl;
+                  nextOpenaiBaseUrl = targetOpenaiUrl;
+                } else {
+                  nextBaseUrl = prev.openaiBaseUrl || DEFAULT_OPENAI_URL;
+                }
+              } else if (
+                remoteProvider === 'openai' &&
+                remoteIsPublicHttps &&
+                remoteOpenaiUrl &&
+                remoteOpenaiUrl !== prev.baseUrl
+              ) {
+                nextBaseUrl = remoteOpenaiUrl;
+                nextOpenaiBaseUrl = remoteOpenaiUrl;
+              } else if (
+                remoteProvider === 'openai' &&
+                remoteIsLoopback &&
+                remoteOpenaiUrl &&
+                remoteOpenaiUrl !== 'http://127.0.0.1:1234/v1' &&
+                remoteOpenaiUrl !== prev.baseUrl
+              ) {
+                nextBaseUrl = remoteOpenaiUrl;
+                nextOpenaiBaseUrl = remoteOpenaiUrl;
+              }
+            }
+
+            return {
+              ...prev,
+              provider: nextProvider,
+              baseUrl: nextBaseUrl,
+              selectedModel:
+                typeof remoteSettings.selectedModel === 'string' &&
+                remoteSettings.selectedModel.trim()
+                  ? remoteSettings.selectedModel
+                  : prev.selectedModel,
+              availableModels:
+                Array.isArray(remoteSettings.availableModels) &&
+                remoteSettings.availableModels.length > 0
+                  ? remoteSettings.availableModels
+                  : prev.availableModels,
+              temperature:
+                typeof remoteSettings.temperature === 'number'
+                  ? remoteSettings.temperature
+                  : prev.temperature,
+              numPredict:
+                typeof remoteSettings.numPredict === 'number'
+                  ? remoteSettings.numPredict
+                  : prev.numPredict,
+              numCtx:
+                typeof remoteSettings.numCtx === 'number'
+                  ? remoteSettings.numCtx
+                  : prev.numCtx,
+              storyMemoryEnabled:
+                typeof remoteSettings.storyMemoryEnabled === 'boolean'
+                  ? remoteSettings.storyMemoryEnabled
+                  : prev.storyMemoryEnabled,
+              // Strictly preserve local/session apiKey
+              apiKey: prev.apiKey,
+              openaiBaseUrl: nextOpenaiBaseUrl,
+            };
+          });
+        } else if (clientMode) {
+          setSettings((prev) => ({
+            ...prev,
+            provider: 'ollama',
+            baseUrl: '/api',
+          }));
+        }
+      }
+
+      lastSyncedBodyJsonRef.current = remoteHash;
+    },
+    []
+  );
+
   useEffect(() => {
     let cancelled = false;
     const probeController = new AbortController();
     let probeTimeout: number | undefined;
 
     void (async () => {
-      const loaded = await loadAllPersistedState();
+      const [persistedSyncTs, loaded] = await Promise.all([
+        loadMobileSyncUpdatedAt(),
+        loadAllPersistedState(),
+      ]);
       if (cancelled) return;
+      syncUpdatedAtRef.current = persistedSyncTs;
+
+      let clientModeActive =
+        !isElectronHost &&
+        Boolean(
+          initialMobileLinkSession.hadUrlToken || initialMobileLinkSession.token
+        );
+      let startupRemoteSnapshot: MobileSyncStatePayload | null = null;
+
+      if (
+        !isElectronHost &&
+        typeof window !== 'undefined' &&
+        (clientModeActive || window.location.protocol.startsWith('http'))
+      ) {
+        try {
+          startupRemoteSnapshot = await fetchMobileSyncState(
+            '',
+            initialMobileLinkSession.token,
+            probeController.signal
+          );
+          if (cancelled) return;
+          if (startupRemoteSnapshot !== null) {
+            clientModeActive = true;
+          }
+        } catch {
+          // Not running behind an authenticated Mobile Link host
+        }
+      }
+
+      if (clientModeActive) {
+        setMobileLinkClientActive(true);
+        setIsMobileLinkClient(true);
+      }
+
+      const effectiveClientSettings =
+        clientModeActive && startupRemoteSnapshot?.preferences?.settings
+          ? {
+              ...loaded.settings,
+              ...startupRemoteSnapshot.preferences.settings,
+            }
+          : loaded.settings;
+      const effectiveProvider =
+        effectiveClientSettings.provider === 'openai' ? 'openai' : 'ollama';
+      const candidateOpenaiUrl = (
+        effectiveClientSettings.openaiBaseUrl ??
+        (effectiveProvider === 'openai'
+          ? effectiveClientSettings.baseUrl
+          : undefined)
+      )
+        ?.trim()
+        .replace(/\/+$/, '');
+      const isLoopbackOpenai = isLocalLoopbackUrl(candidateOpenaiUrl);
+      const isPublicHttpsOpenai = isPublicHttpsApiUrl(candidateOpenaiUrl);
+
+      const initialSettings = clientModeActive
+        ? {
+            ...loaded.settings,
+            provider: effectiveProvider as 'ollama' | 'openai',
+            baseUrl:
+              effectiveProvider === 'openai'
+                ? isPublicHttpsOpenai && candidateOpenaiUrl
+                  ? candidateOpenaiUrl
+                  : '/v1'
+                : '/api',
+            ...(isLoopbackOpenai && candidateOpenaiUrl
+              ? {
+                  openaiBaseUrl:
+                    candidateOpenaiUrl === '/v1'
+                      ? 'http://127.0.0.1:1234/v1'
+                      : candidateOpenaiUrl,
+                }
+              : isPublicHttpsOpenai && candidateOpenaiUrl
+                ? { openaiBaseUrl: candidateOpenaiUrl }
+                : {}),
+          }
+        : loaded.settings;
 
       setCharacters(loaded.characters);
       setActiveCharacterId(loaded.activeCharacterId);
       setConversations(loaded.conversations);
       setStoryMemories(loaded.storyMemories);
-      setSettings(loaded.settings);
+      setSettings(initialSettings);
       setUserPersona(loaded.userPersona);
       setThemeId(loaded.themeId);
       setBubbleSchemeId(loaded.bubbleSchemeId);
@@ -300,15 +753,37 @@ export default function App() {
       setWallpaperFit(loaded.wallpaperFit);
       setParallaxEnabled(loaded.parallaxEnabled);
       setVisualSettings(loaded.visualSettings);
+
+      if (
+        clientModeActive &&
+        startupRemoteSnapshot &&
+        startupRemoteSnapshot.updatedAt > syncUpdatedAtRef.current
+      ) {
+        applyRemoteSyncSnapshot(startupRemoteSnapshot, true);
+      }
+
       setIsStorageReady(true);
 
+      if (isElectronHost && window.electronAPI?.getMobileLinkStatus) {
+        void window.electronAPI
+          .getMobileLinkStatus()
+          .then((statusPayload) => {
+            if (!cancelled && statusPayload) {
+              setMobileLinkStatus(statusPayload);
+            }
+          })
+          .catch(() => {
+            // ignore
+          });
+      }
+
       probeTimeout = window.setTimeout(() => probeController.abort(), 3500);
-      const initialProvider = loaded.settings.provider ?? 'ollama';
+      const initialProvider = initialSettings.provider ?? 'ollama';
       try {
         const models = await fetchProviderModels(
           initialProvider,
-          loaded.settings.baseUrl,
-          loaded.settings.apiKey,
+          initialSettings.baseUrl,
+          initialSettings.apiKey,
           probeController.signal
         );
         if (cancelled) return;
@@ -324,7 +799,7 @@ export default function App() {
         if (!cancelled) {
           if (
             initialProvider === 'openai' &&
-            loaded.settings.selectedModel.trim().length > 0
+            initialSettings.selectedModel.trim().length > 0
           ) {
             setOllamaStatus('connected');
           } else {
@@ -345,7 +820,7 @@ export default function App() {
         window.clearTimeout(probeTimeout);
       }
     };
-  }, []);
+  }, [applyRemoteSyncSnapshot, initialMobileLinkSession, isElectronHost]);
 
   useEffect(() => {
     document.documentElement.lang = language;
@@ -417,6 +892,409 @@ export default function App() {
     if (!isStorageReady) return;
     void idbSet(STORAGE_KEYS.visualSettings, visualSettings);
   }, [isStorageReady, visualSettings]);
+
+  const latestSyncSnapshotDataRef = useRef({
+    characters,
+    activeCharacterId: activeCharacter.id,
+    conversations,
+    storyMemories,
+    userPersona,
+    themeId,
+    bubbleSchemeId,
+    language,
+    wallpaperFit,
+    parallaxEnabled,
+    visualSettings,
+    settings,
+  });
+  latestSyncSnapshotDataRef.current = {
+    characters,
+    activeCharacterId: activeCharacter.id,
+    conversations,
+    storyMemories,
+    userPersona,
+    themeId,
+    bubbleSchemeId,
+    language,
+    wallpaperFit,
+    parallaxEnabled,
+    visualSettings,
+    settings,
+  };
+
+  // Desktop Electron Host: initial sync handshake whenever Mobile Link server activates
+  useEffect(() => {
+    if (
+      !isStorageReady ||
+      !isElectronHost ||
+      !mobileLinkStatus.active ||
+      !mobileLinkStatus.port ||
+      !mobileLinkStatus.token
+    ) {
+      return;
+    }
+
+    let cancelled = false;
+    const relayOrigin = `http://127.0.0.1:${mobileLinkStatus.port}`;
+    const relayToken = mobileLinkStatus.token;
+
+    void (async () => {
+      try {
+        const remote = await fetchMobileSyncState(relayOrigin, relayToken);
+        if (cancelled) return;
+
+        if (
+          remote &&
+          remote.updatedAt > syncUpdatedAtRef.current &&
+          !streamingCharIdRef.current
+        ) {
+          applyRemoteSyncSnapshot(remote, false);
+          return;
+        }
+
+        if (
+          !remote ||
+          remote.updatedAt === 0 ||
+          syncUpdatedAtRef.current > remote.updatedAt
+        ) {
+          if (syncUpdatedAtRef.current === 0) {
+            syncUpdatedAtRef.current = Date.now();
+            void saveMobileSyncUpdatedAt(syncUpdatedAtRef.current);
+          }
+          const cur = latestSyncSnapshotDataRef.current;
+          const payload = buildMobileSyncPayload({
+            updatedAt: syncUpdatedAtRef.current,
+            characters: cur.characters,
+            conversations: cur.conversations,
+            storyMemories: cur.storyMemories,
+            preferences: {
+              activeCharacterId: cur.activeCharacterId,
+              userPersona: cur.userPersona,
+              themeId: cur.themeId,
+              bubbleSchemeId: cur.bubbleSchemeId,
+              language: cur.language,
+              wallpaperFit: cur.wallpaperFit,
+              parallaxEnabled: cur.parallaxEnabled,
+              visualSettings: cur.visualSettings,
+              settings: cur.settings,
+            },
+          });
+          lastSyncedBodyJsonRef.current = serializeSyncBody(payload);
+          lastAppliedPayloadRef.current =
+            serializeNormalizedSyncPayload(payload);
+          await postMobileSyncState(payload, relayOrigin, relayToken);
+        }
+      } catch {
+        // Ignore transient sync handshake errors
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    applyRemoteSyncSnapshot,
+    isElectronHost,
+    isStorageReady,
+    mobileLinkStatus.active,
+    mobileLinkStatus.port,
+    mobileLinkStatus.token,
+  ]);
+
+  // Debounced sync push on genuine local mutations (skips streaming & echoed remote snapshots)
+  useEffect(() => {
+    if (!isStorageReady) return;
+    if (!hasHydratedForSyncRef.current) {
+      hasHydratedForSyncRef.current = true;
+      return;
+    }
+    if (streamingCharacterId !== null) return;
+
+    if (isApplyingRemoteSyncRef.current) {
+      isApplyingRemoteSyncRef.current = false;
+      if (remoteSyncResetTimerRef.current !== null) {
+        window.clearTimeout(remoteSyncResetTimerRef.current);
+        remoteSyncResetTimerRef.current = null;
+      }
+      return;
+    }
+
+    const canSyncAsClient = isMobileLinkClient;
+    const canSyncAsHost =
+      isElectronHost &&
+      mobileLinkStatus.active &&
+      Boolean(mobileLinkStatus.port) &&
+      Boolean(mobileLinkStatus.token);
+
+    if (!canSyncAsClient && !canSyncAsHost) return;
+
+    const relayOrigin = canSyncAsClient
+      ? ''
+      : `http://127.0.0.1:${mobileLinkStatus.port}`;
+    const relayToken = canSyncAsClient ? null : mobileLinkStatus.token;
+
+    if (pendingPushTimerRef.current !== null) {
+      window.clearTimeout(pendingPushTimerRef.current);
+    }
+
+    pendingPushTimerRef.current = window.setTimeout(() => {
+      pendingPushTimerRef.current = null;
+      if (
+        isApplyingRemoteSyncRef.current ||
+        streamingCharIdRef.current !== null ||
+        isSyncRequestInFlightRef.current
+      ) {
+        return;
+      }
+
+      const cur = latestSyncSnapshotDataRef.current;
+      const previewPayload = buildMobileSyncPayload({
+        updatedAt: syncUpdatedAtRef.current,
+        characters: cur.characters,
+        conversations: cur.conversations,
+        storyMemories: cur.storyMemories,
+        preferences: {
+          activeCharacterId: cur.activeCharacterId,
+          userPersona: cur.userPersona,
+          themeId: cur.themeId,
+          bubbleSchemeId: cur.bubbleSchemeId,
+          language: cur.language,
+          wallpaperFit: cur.wallpaperFit,
+          parallaxEnabled: cur.parallaxEnabled,
+          visualSettings: cur.visualSettings,
+          settings: cur.settings,
+        },
+      });
+      const bodyJson = serializeSyncBody(previewPayload);
+      const bodyFingerprint =
+        computeMobileSyncContentFingerprint(previewPayload);
+      if (
+        bodyJson === lastSyncedBodyJsonRef.current ||
+        (lastSyncedFingerprintRef.current &&
+          bodyFingerprint === lastSyncedFingerprintRef.current)
+      ) {
+        return;
+      }
+
+      const nextUpdatedAt = Math.max(
+        Date.now(),
+        syncUpdatedAtRef.current + 1
+      );
+      syncUpdatedAtRef.current = nextUpdatedAt;
+      void saveMobileSyncUpdatedAt(nextUpdatedAt);
+
+      const finalPayload: MobileSyncStatePayload = {
+        ...previewPayload,
+        updatedAt: nextUpdatedAt,
+      };
+
+      isSyncRequestInFlightRef.current = true;
+      void postMobileSyncState(finalPayload, relayOrigin, relayToken)
+        .then((res) => {
+          if (res?.ok) {
+            lastSyncedBodyJsonRef.current = bodyJson;
+            lastSyncedFingerprintRef.current = bodyFingerprint;
+            lastAppliedPayloadRef.current =
+              serializeNormalizedSyncPayload(previewPayload);
+            if (res.updatedAt > syncUpdatedAtRef.current) {
+              syncUpdatedAtRef.current = res.updatedAt;
+              void saveMobileSyncUpdatedAt(res.updatedAt);
+            }
+          }
+        })
+        .catch(() => {
+          // Ignore transient network errors while pushing sync state
+        })
+        .finally(() => {
+          isSyncRequestInFlightRef.current = false;
+        });
+    }, 400);
+
+    return () => {
+      if (pendingPushTimerRef.current !== null) {
+        window.clearTimeout(pendingPushTimerRef.current);
+        pendingPushTimerRef.current = null;
+      }
+    };
+  }, [
+    activeCharacter.id,
+    bubbleSchemeId,
+    characters,
+    conversations,
+    isElectronHost,
+    isMobileLinkClient,
+    isStorageReady,
+    language,
+    mobileLinkStatus.active,
+    mobileLinkStatus.port,
+    mobileLinkStatus.token,
+    parallaxEnabled,
+    settings,
+    storyMemories,
+    streamingCharacterId,
+    themeId,
+    userPersona,
+    visualSettings,
+    wallpaperFit,
+  ]);
+
+  // Immediate sync helper (e.g. when saving SettingsModal model selection)
+  const pushSyncStateNow = useCallback(
+    (overrides?: {
+      settings?: OllamaSettings;
+      userPersona?: UserPersona;
+    }) => {
+      if (!isStorageReady) return;
+      const canSyncAsClient = isMobileLinkClient;
+      const canSyncAsHost =
+        isElectronHost &&
+        mobileLinkStatus.active &&
+        Boolean(mobileLinkStatus.port) &&
+        Boolean(mobileLinkStatus.token);
+
+      if (!canSyncAsClient && !canSyncAsHost) return;
+
+      if (pendingPushTimerRef.current !== null) {
+        window.clearTimeout(pendingPushTimerRef.current);
+        pendingPushTimerRef.current = null;
+      }
+
+      const relayOrigin = canSyncAsClient
+        ? ''
+        : `http://127.0.0.1:${mobileLinkStatus.port}`;
+      const relayToken = canSyncAsClient ? null : mobileLinkStatus.token;
+      const cur = latestSyncSnapshotDataRef.current;
+
+      const nextUpdatedAt = Math.max(
+        Date.now(),
+        syncUpdatedAtRef.current + 1
+      );
+      syncUpdatedAtRef.current = nextUpdatedAt;
+      void saveMobileSyncUpdatedAt(nextUpdatedAt);
+
+      const finalPayload = buildMobileSyncPayload({
+        updatedAt: nextUpdatedAt,
+        characters: cur.characters,
+        conversations: cur.conversations,
+        storyMemories: cur.storyMemories,
+        preferences: {
+          activeCharacterId: cur.activeCharacterId,
+          userPersona: overrides?.userPersona ?? cur.userPersona,
+          themeId: cur.themeId,
+          bubbleSchemeId: cur.bubbleSchemeId,
+          language: cur.language,
+          wallpaperFit: cur.wallpaperFit,
+          parallaxEnabled: cur.parallaxEnabled,
+          visualSettings: cur.visualSettings,
+          settings: overrides?.settings ?? cur.settings,
+        },
+      });
+
+      const bodyHash = serializeSyncBody(finalPayload);
+      lastSyncedBodyJsonRef.current = bodyHash;
+      lastSyncedFingerprintRef.current =
+        computeMobileSyncContentFingerprint(finalPayload);
+      lastAppliedPayloadRef.current =
+        serializeNormalizedSyncPayload(finalPayload);
+      lastAppliedRemoteSignatureRef.current =
+        computeMobileSyncSignature(finalPayload);
+
+      isSyncRequestInFlightRef.current = true;
+      void postMobileSyncState(finalPayload, relayOrigin, relayToken)
+        .then((res) => {
+          if (res?.ok && res.updatedAt > syncUpdatedAtRef.current) {
+            syncUpdatedAtRef.current = res.updatedAt;
+            lastAppliedRemoteSignatureRef.current = `${res.updatedAt}:${bodyHash}`;
+            void saveMobileSyncUpdatedAt(res.updatedAt);
+          }
+        })
+        .catch(() => {
+          // Ignore transient network errors while pushing sync state
+        })
+        .finally(() => {
+          isSyncRequestInFlightRef.current = false;
+        });
+    },
+    [
+      isElectronHost,
+      isMobileLinkClient,
+      isStorageReady,
+      mobileLinkStatus.active,
+      mobileLinkStatus.port,
+      mobileLinkStatus.token,
+    ]
+  );
+
+  // Live background sync polling (Desktop Host & Mobile Link Client; paused while streaming)
+  useEffect(() => {
+    if (!isStorageReady || streamingCharacterId !== null) return;
+
+    const canSyncAsClient = isMobileLinkClient;
+    const canSyncAsHost =
+      isElectronHost &&
+      mobileLinkStatus.active &&
+      Boolean(mobileLinkStatus.port) &&
+      Boolean(mobileLinkStatus.token);
+
+    if (!canSyncAsClient && !canSyncAsHost) return;
+
+    const relayOrigin = canSyncAsClient
+      ? ''
+      : `http://127.0.0.1:${mobileLinkStatus.port}`;
+    const relayToken = canSyncAsClient ? null : mobileLinkStatus.token;
+
+    const pollTimer = window.setInterval(() => {
+      if (
+        document.visibilityState === 'hidden' ||
+        streamingCharIdRef.current !== null ||
+        isSyncRequestInFlightRef.current
+      ) {
+        return;
+      }
+
+      isSyncRequestInFlightRef.current = true;
+      void fetchMobileSyncState(relayOrigin, relayToken)
+        .then((remote) => {
+          if (!remote || streamingCharIdRef.current !== null) {
+            return;
+          }
+          if (remote.updatedAt <= syncUpdatedAtRef.current) {
+            return;
+          }
+          const remoteSig = computeMobileSyncSignature(remote);
+          if (remoteSig === lastAppliedRemoteSignatureRef.current) {
+            return;
+          }
+          const normalizedRemoteJson = serializeNormalizedSyncPayload(remote);
+          if (
+            lastAppliedPayloadRef.current &&
+            normalizedRemoteJson === lastAppliedPayloadRef.current
+          ) {
+            lastAppliedRemoteSignatureRef.current = remoteSig;
+            syncUpdatedAtRef.current = remote.updatedAt;
+            return;
+          }
+          applyRemoteSyncSnapshot(remote, canSyncAsClient);
+        })
+        .catch(() => {
+          // Ignore transient poll errors
+        })
+        .finally(() => {
+          isSyncRequestInFlightRef.current = false;
+        });
+    }, 8000);
+
+    return () => window.clearInterval(pollTimer);
+  }, [
+    applyRemoteSyncSnapshot,
+    isElectronHost,
+    isMobileLinkClient,
+    isStorageReady,
+    mobileLinkStatus.active,
+    mobileLinkStatus.port,
+    mobileLinkStatus.token,
+    streamingCharacterId,
+  ]);
 
   const streamAssistantReply = useCallback(
     async (targetCharacter: Character, baseHistory: ChatMessage[]) => {
@@ -1667,6 +2545,12 @@ export default function App() {
                   setIsSettingsOpen(true);
                 }}
                 onOpenOllamaSetup={() => setShowOllamaSetupHelper(true)}
+                mobileLinkActive={mobileLinkStatus.active}
+                onOpenMobileLink={
+                  isElectronHost && window.electronAPI?.startMobileLink
+                    ? () => setIsMobileLinkModalOpen(true)
+                    : undefined
+                }
                 onExit={handleExitApp}
               />
             </motion.div>
@@ -1750,6 +2634,7 @@ export default function App() {
             } else if (next.availableModels.length > 0) {
               setOllamaStatus('connected');
             }
+            pushSyncStateNow({ settings: next, userPersona: nextPersona });
           }}
           onExportBackup={handleExportBackup}
           onImportBackup={handleImportBackup}
@@ -1831,6 +2716,15 @@ export default function App() {
             }));
             setShowOllamaSetupHelper(false);
           }}
+        />
+
+        <MobileLinkModal
+          t={t}
+          isOpen={isMobileLinkModalOpen}
+          language={language}
+          status={mobileLinkStatus}
+          onStatusChange={setMobileLinkStatus}
+          onClose={() => setIsMobileLinkModalOpen(false)}
         />
 
         <OfflineIndicator t={t} />

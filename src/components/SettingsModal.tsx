@@ -61,6 +61,11 @@ import {
   normalizeBaseUrl,
   validateProviderBaseUrl,
 } from '../utils/ollama';
+import {
+  isLocalLoopbackUrl,
+  isMobileLinkClient,
+  isPublicHttpsApiUrl,
+} from '../utils/mobileSync';
 import { hasOsSecretStorage } from '../utils/storage';
 import { MessageContent } from './MessageContent';
 
@@ -160,6 +165,9 @@ export function SettingsModal({
   const [apiKey, setApiKey] = useState(settings.apiKey ?? '');
   const [showApiKey, setShowApiKey] = useState(false);
   const [isCustomPresetSelected, setIsCustomPresetSelected] = useState(false);
+  const [mobileLoopbackTargetUrl, setMobileLoopbackTargetUrl] = useState(
+    'http://127.0.0.1:1234/v1'
+  );
   const [selectedModel, setSelectedModel] = useState(settings.selectedModel);
   const [availableModels, setAvailableModels] = useState<OllamaModelTag[]>(
     settings.availableModels
@@ -318,27 +326,60 @@ export function SettingsModal({
     }
     const justOpened = !wasOpenRef.current;
     wasOpenRef.current = true;
+    if (!justOpened) {
+      return;
+    }
 
+    const mobileClient = isMobileLinkClient();
     const initialProvider: ApiProvider =
       settings.provider === 'openai' ? 'openai' : 'ollama';
-    const initialUrl =
+    const rawInitialUrl =
       settings.baseUrl ||
       (initialProvider === 'openai' ? DEFAULT_OPENAI_URL : DEFAULT_OLLAMA_URL);
+    const initialUrl = mobileClient
+      ? initialProvider === 'openai'
+        ? isLocalLoopbackUrl(rawInitialUrl)
+          ? '/v1'
+          : rawInitialUrl
+        : isLocalLoopbackUrl(rawInitialUrl)
+          ? '/api'
+          : rawInitialUrl
+      : rawInitialUrl;
+    const initialLoopbackTarget =
+      isLocalLoopbackUrl(settings.openaiBaseUrl) &&
+      settings.openaiBaseUrl !== '/v1'
+        ? settings.openaiBaseUrl!.trim().replace(/\/+$/, '')
+        : isLocalLoopbackUrl(rawInitialUrl) &&
+            rawInitialUrl !== '/v1' &&
+            rawInitialUrl !== '/api'
+          ? rawInitialUrl.trim().replace(/\/+$/, '')
+          : 'http://127.0.0.1:1234/v1';
     const initialOpenaiUrl =
-      settings.openaiBaseUrl ||
-      (initialProvider === 'openai' ? initialUrl : DEFAULT_OPENAI_URL);
+      initialProvider === 'openai'
+        ? initialUrl
+        : mobileClient && isLocalLoopbackUrl(settings.openaiBaseUrl)
+          ? '/v1'
+          : settings.openaiBaseUrl ||
+            (mobileClient ? '/v1' : DEFAULT_OPENAI_URL);
     const initialOllamaUrl =
-      initialProvider === 'ollama' ? initialUrl : DEFAULT_OLLAMA_URL;
+      initialProvider === 'ollama'
+        ? initialUrl
+        : mobileClient
+          ? '/api'
+          : DEFAULT_OLLAMA_URL;
 
     setProvider(initialProvider);
     setBaseUrl(initialUrl);
     setOllamaBaseUrlDraft(initialOllamaUrl);
     setOpenaiBaseUrlDraft(initialOpenaiUrl);
+    setMobileLoopbackTargetUrl(initialLoopbackTarget);
     setApiKey(settings.apiKey ?? '');
     setShowApiKey(false);
     setIsCustomPresetSelected(
       initialProvider === 'openai' &&
-        detectOpenAIPresetId(initialUrl) === 'custom'
+        detectOpenAIPresetId(
+          initialUrl === '/v1' ? initialLoopbackTarget : initialUrl
+        ) === 'custom'
     );
     setSelectedModel(settings.selectedModel);
     setAvailableModels(settings.availableModels);
@@ -349,15 +390,13 @@ export function SettingsModal({
     setPersonaAppearance(userPersona.appearance);
     setPersonaBio(userPersona.bio);
 
-    if (justOpened) {
-      setFetchError(null);
-      setFetchSuccessMessage(null);
-      setBackupNotice(null);
-      setActiveTab(focusSection === 'persona' ? 'data' : 'connection');
-      void runDiagnostics(initialProvider, initialUrl, settings.apiKey);
-    }
+    setFetchError(null);
+    setFetchSuccessMessage(null);
+    setBackupNotice(null);
+    setActiveTab(focusSection === 'persona' ? 'data' : 'connection');
+    void runDiagnostics(initialProvider, initialUrl, settings.apiKey);
 
-    if (justOpened && focusSection === 'persona') {
+    if (focusSection === 'persona') {
       const timer = window.setTimeout(() => {
         personaNameInputRef.current?.focus();
       }, 60);
@@ -383,12 +422,46 @@ export function SettingsModal({
 
     let nextUrl: string;
     if (nextProvider === 'openai') {
-      setOllamaBaseUrlDraft(normalizeBaseUrl(baseUrl, DEFAULT_OLLAMA_URL));
-      nextUrl = openaiBaseUrlDraft || DEFAULT_OPENAI_URL;
-      setIsCustomPresetSelected(detectOpenAIPresetId(nextUrl) === 'custom');
+      const normalizedOllama = normalizeBaseUrl(baseUrl, DEFAULT_OLLAMA_URL);
+      setOllamaBaseUrlDraft(
+        mobileLinkConnected && isLocalLoopbackUrl(normalizedOllama)
+          ? '/api'
+          : normalizedOllama
+      );
+      if (
+        mobileLinkConnected &&
+        (!openaiBaseUrlDraft ||
+          isLocalLoopbackUrl(openaiBaseUrlDraft) ||
+          isLocalLoopbackUrl(settings.openaiBaseUrl))
+      ) {
+        nextUrl =
+          isPublicHttpsApiUrl(openaiBaseUrlDraft)
+            ? openaiBaseUrlDraft
+            : '/v1';
+      } else {
+        nextUrl = openaiBaseUrlDraft || DEFAULT_OPENAI_URL;
+      }
+      setIsCustomPresetSelected(
+        detectOpenAIPresetId(
+          nextUrl === '/v1' ? mobileLoopbackTargetUrl : nextUrl
+        ) === 'custom'
+      );
     } else {
-      setOpenaiBaseUrlDraft(normalizeBaseUrl(baseUrl, DEFAULT_OPENAI_URL));
-      nextUrl = ollamaBaseUrlDraft || DEFAULT_OLLAMA_URL;
+      const normalizedOpenai = normalizeBaseUrl(baseUrl, DEFAULT_OPENAI_URL);
+      setOpenaiBaseUrlDraft(normalizedOpenai);
+      if (
+        mobileLinkConnected &&
+        isLocalLoopbackUrl(normalizedOpenai) &&
+        normalizedOpenai !== '/v1'
+      ) {
+        setMobileLoopbackTargetUrl(normalizedOpenai);
+      }
+      nextUrl =
+        mobileLinkConnected &&
+        (!ollamaBaseUrlDraft || isLocalLoopbackUrl(ollamaBaseUrlDraft))
+          ? '/api'
+          : ollamaBaseUrlDraft ||
+            (mobileLinkConnected ? '/api' : DEFAULT_OLLAMA_URL);
     }
 
     setProvider(nextProvider);
@@ -413,6 +486,12 @@ export function SettingsModal({
     const preset = OPENAI_COMPAT_PRESETS.find((p) => p.id === presetId);
     if (!preset) return;
     setIsCustomPresetSelected(false);
+    if (mobileLinkConnected && preset.id === 'lmstudio') {
+      setMobileLoopbackTargetUrl('http://127.0.0.1:1234/v1');
+      setBaseUrl('/v1');
+      setOpenaiBaseUrlDraft('/v1');
+      return;
+    }
     setBaseUrl(preset.baseUrl);
     setOpenaiBaseUrlDraft(preset.baseUrl);
   };
@@ -441,15 +520,30 @@ export function SettingsModal({
         return;
       }
 
-      const normalized = urlCheck.normalized;
-      setBaseUrl(normalized);
-      if (provider === 'openai') {
-        setOpenaiBaseUrlDraft(normalized);
-      } else {
-        setOllamaBaseUrlDraft(normalized);
+      let effectiveFetchUrl = urlCheck.normalized;
+      if (mobileLinkConnected && isLocalLoopbackUrl(effectiveFetchUrl)) {
+        if (provider === 'openai') {
+          if (effectiveFetchUrl !== '/v1') {
+            setMobileLoopbackTargetUrl(effectiveFetchUrl);
+          }
+          effectiveFetchUrl = '/v1';
+        } else {
+          effectiveFetchUrl = '/api';
+        }
       }
 
-      const models = await fetchProviderModels(provider, normalized, apiKey);
+      setBaseUrl(effectiveFetchUrl);
+      if (provider === 'openai') {
+        setOpenaiBaseUrlDraft(effectiveFetchUrl);
+      } else {
+        setOllamaBaseUrlDraft(effectiveFetchUrl);
+      }
+
+      const models = await fetchProviderModels(
+        provider,
+        effectiveFetchUrl,
+        apiKey
+      );
       setAvailableModels(models);
 
       setDiag((prev) => ({
@@ -500,15 +594,35 @@ export function SettingsModal({
     }
 
     const normalizedCurrent = urlCheck.normalized;
-    const savedOpenaiBaseUrl =
+    let savedBaseUrl = normalizedCurrent;
+    let savedOpenaiBaseUrl =
       provider === 'openai'
         ? normalizedCurrent
-        : normalizeBaseUrl(openaiBaseUrlDraft, DEFAULT_OPENAI_URL);
+        : openaiBaseUrlDraft === '/v1'
+          ? mobileLoopbackTargetUrl
+          : normalizeBaseUrl(openaiBaseUrlDraft, DEFAULT_OPENAI_URL);
+
+    if (mobileLinkConnected) {
+      if (provider === 'openai') {
+        if (normalizedCurrent === '/v1') {
+          savedBaseUrl = '/v1';
+          savedOpenaiBaseUrl = mobileLoopbackTargetUrl;
+        } else if (isLocalLoopbackUrl(normalizedCurrent)) {
+          savedBaseUrl = '/v1';
+          savedOpenaiBaseUrl = normalizedCurrent;
+        } else {
+          savedBaseUrl = normalizedCurrent;
+          savedOpenaiBaseUrl = normalizedCurrent;
+        }
+      } else if (isLocalLoopbackUrl(normalizedCurrent)) {
+        savedBaseUrl = '/api';
+      }
+    }
 
     onSave(
       {
         provider,
-        baseUrl: normalizedCurrent,
+        baseUrl: savedBaseUrl,
         openaiBaseUrl: savedOpenaiBaseUrl,
         apiKey: apiKey.trim(),
         selectedModel: selectedModel.trim(),
@@ -611,6 +725,8 @@ export function SettingsModal({
         ? t.diagPwaReady
         : t.diagPwaUnsupported;
 
+  const mobileLinkConnected = isMobileLinkClient();
+
   const activeBubbleScheme =
     BUBBLE_SCHEMES[bubbleSchemeId] ?? BUBBLE_SCHEMES['indigo-violet'];
   const effectiveUserColor =
@@ -664,23 +780,23 @@ export function SettingsModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--theme-modal-backdrop)] p-4 backdrop-blur-md transition-colors duration-700 ease-in-out"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--theme-modal-backdrop)] p-2 backdrop-blur-md transition-colors duration-700 ease-in-out sm:p-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby="ollama-settings-title"
       onClick={onClose}
     >
       <div
-        className="flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-[28px] border border-[rgba(255,255,255,0.12)] bg-[var(--theme-glass-strong)] text-[var(--theme-text)] shadow-[inset_0_1px_0_rgba(255,255,255,0.14),0_24px_80px_rgba(0,0,0,0.68)] backdrop-blur-2xl transition-colors duration-700 ease-in-out"
+        className="flex max-h-[88dvh] w-[95vw] max-w-2xl flex-col overflow-hidden rounded-2xl border border-[rgba(255,255,255,0.12)] bg-[var(--theme-glass-strong)] p-4 text-[var(--theme-text)] shadow-[inset_0_1px_0_rgba(255,255,255,0.14),0_24px_80px_rgba(0,0,0,0.68)] backdrop-blur-2xl transition-colors duration-700 ease-in-out sm:max-h-[92vh] sm:w-full sm:rounded-[28px] sm:p-0"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Top Modal Header + Language Switch + Tabs */}
-        <div className="shrink-0 border-b border-[rgba(255,255,255,0.12)] px-6 pt-5 pb-4">
+        <div className="shrink-0 border-b border-[rgba(255,255,255,0.12)] pb-3 sm:px-6 sm:pt-5 sm:pb-4">
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
               <h2
                 id="ollama-settings-title"
-                className="font-display text-xl font-semibold text-white"
+                className="font-display text-xl font-semibold text-white sm:text-2xl"
               >
                 {t.settingsTitle}
               </h2>
@@ -741,14 +857,15 @@ export function SettingsModal({
               role="tab"
               aria-selected={activeTab === 'connection'}
               onClick={() => setActiveTab('connection')}
-              className={`inline-flex items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold transition-colors whitespace-nowrap ${
+              className={`inline-flex min-w-0 items-center justify-center gap-1.5 rounded-xl px-2 py-2 text-xs font-semibold transition-colors whitespace-nowrap sm:px-3 ${
                 activeTab === 'connection'
                   ? 'bg-[var(--theme-accent)] text-[var(--theme-on-accent)] shadow-sm'
                   : 'text-[var(--theme-muted)] hover:bg-white/5 hover:text-white'
               }`}
             >
               <Cpu className="h-3.5 w-3.5 shrink-0" />
-              <span className="truncate">{t.tabConnectionModel}</span>
+              <span className="truncate sm:hidden">{t.tabConnectionShort}</span>
+              <span className="hidden sm:inline sm:truncate">{t.tabConnectionModel}</span>
             </button>
 
             <button
@@ -756,14 +873,15 @@ export function SettingsModal({
               role="tab"
               aria-selected={activeTab === 'visual'}
               onClick={() => setActiveTab('visual')}
-              className={`inline-flex items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold transition-colors whitespace-nowrap ${
+              className={`inline-flex min-w-0 items-center justify-center gap-1.5 rounded-xl px-2 py-2 text-xs font-semibold transition-colors whitespace-nowrap sm:px-3 ${
                 activeTab === 'visual'
                   ? 'bg-[var(--theme-accent)] text-[var(--theme-on-accent)] shadow-sm'
                   : 'text-[var(--theme-muted)] hover:bg-white/5 hover:text-white'
               }`}
             >
               <Palette className="h-3.5 w-3.5 shrink-0" />
-              <span className="truncate">{t.tabVisualStudio}</span>
+              <span className="truncate sm:hidden">{t.tabVisualShort}</span>
+              <span className="hidden sm:inline sm:truncate">{t.tabVisualStudio}</span>
             </button>
 
             <button
@@ -771,24 +889,26 @@ export function SettingsModal({
               role="tab"
               aria-selected={activeTab === 'data'}
               onClick={() => setActiveTab('data')}
-              className={`inline-flex items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold transition-colors whitespace-nowrap ${
+              className={`inline-flex min-w-0 items-center justify-center gap-1.5 rounded-xl px-2 py-2 text-xs font-semibold transition-colors whitespace-nowrap sm:px-3 ${
                 activeTab === 'data'
                   ? 'bg-[var(--theme-accent)] text-[var(--theme-on-accent)] shadow-sm'
                   : 'text-[var(--theme-muted)] hover:bg-white/5 hover:text-white'
               }`}
             >
               <Database className="h-3.5 w-3.5 shrink-0" />
-              <span className="truncate">{t.tabDataBackup}</span>
+              <span className="truncate sm:hidden">{t.tabDataShort}</span>
+              <span className="hidden sm:inline sm:truncate">{t.tabDataBackup}</span>
             </button>
           </div>
         </div>
 
         {/* Scrollable Form Body */}
         <form
+          noValidate
           onSubmit={handleSubmit}
           className="flex min-h-0 flex-1 flex-col overflow-hidden"
         >
-          <div className="flex-1 space-y-5 overflow-y-auto px-6 py-5">
+          <div className="flex-1 space-y-5 overflow-y-auto py-4 sm:px-6 sm:py-5">
             {activeTab === 'connection' ? (
               <>
                 {/* Provider Engine Selector */}
@@ -882,7 +1002,7 @@ export function SettingsModal({
                     <input
                       ref={urlInputRef}
                       id="ollama-url-input"
-                      type="url"
+                      type="text"
                       value={baseUrl}
                       onChange={(e) => {
                         const nextVal = e.target.value;
@@ -919,11 +1039,15 @@ export function SettingsModal({
                       </span>
                     </button>
                   </div>
-                  <p className="mt-1.5 text-xs text-[var(--theme-muted)]">
-                    {provider === 'openai'
-                      ? t.openaiBaseUrlHint
-                      : t.ollamaCorsHint}
-                  </p>
+                  {provider === 'openai' ? (
+                    <p className="mt-1.5 text-xs text-[var(--theme-muted)]">
+                      {t.openaiBaseUrlHint}
+                    </p>
+                  ) : !mobileLinkConnected ? (
+                    <p className="mt-1.5 text-xs text-[var(--theme-muted)]">
+                      {t.ollamaCorsHint}
+                    </p>
+                  ) : null}
                 </div>
 
                 {/* Optional API Key (OpenAI-Compatible Mode) */}
@@ -1218,62 +1342,80 @@ export function SettingsModal({
                       </div>
                     </div>
 
-                    <div className="flex items-start gap-2.5">
-                      {renderStatusDot(diag.secureContext ? 'pass' : 'fail')}
-                      <div className="min-w-0 flex-1">
-                        <div className="font-medium text-white">
-                          {t.diagSecureContextLabel}
-                        </div>
-                        <div className="text-[var(--theme-muted)]">
-                          {diag.secureContext
-                            ? t.diagSecureContextPass(diag.origin)
-                            : t.diagSecureContextFail(diag.origin)}
+                    {mobileLinkConnected ? (
+                      <div className="flex items-start gap-2.5 rounded-xl border border-emerald-400/30 bg-emerald-500/12 p-3">
+                        <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" />
+                        <div className="min-w-0 flex-1">
+                          <div className="font-semibold text-emerald-100">
+                            {t.diagMobileLinkActiveTitle}
+                          </div>
+                          <div className="mt-0.5 text-[11px] leading-relaxed text-emerald-200/85">
+                            {t.diagMobileLinkActiveSubtitle}
+                          </div>
                         </div>
                       </div>
-                    </div>
+                    ) : (
+                      <>
+                        <div className="flex items-start gap-2.5">
+                          {renderStatusDot(diag.secureContext ? 'pass' : 'fail')}
+                          <div className="min-w-0 flex-1">
+                            <div className="font-medium text-white">
+                              {t.diagSecureContextLabel}
+                            </div>
+                            <div className="text-[var(--theme-muted)]">
+                              {diag.secureContext
+                                ? t.diagSecureContextPass(diag.origin)
+                                : t.diagSecureContextFail(diag.origin)}
+                            </div>
+                          </div>
+                        </div>
 
-                    <div className="flex items-start gap-2.5">
-                      {renderStatusDot(diag.speechSupported ? 'pass' : 'fail')}
-                      <div className="min-w-0 flex-1">
-                        <div className="font-medium text-white">
-                          {t.diagSpeechLabel}
+                        <div className="flex items-start gap-2.5">
+                          {renderStatusDot(diag.speechSupported ? 'pass' : 'fail')}
+                          <div className="min-w-0 flex-1">
+                            <div className="font-medium text-white">
+                              {t.diagSpeechLabel}
+                            </div>
+                            <div className="text-[var(--theme-muted)]">
+                              {diag.speechSupported
+                                ? t.diagSpeechPass
+                                : t.diagSpeechFail}
+                            </div>
+                          </div>
                         </div>
-                        <div className="text-[var(--theme-muted)]">
-                          {diag.speechSupported
-                            ? t.diagSpeechPass
-                            : t.diagSpeechFail}
-                        </div>
-                      </div>
-                    </div>
 
-                    <div className="flex items-start gap-2.5">
-                      {renderStatusDot(micDiagState)}
-                      <div className="min-w-0 flex-1">
-                        <div className="font-medium text-white">
-                          {t.diagMicPermissionLabel}
+                        <div className="flex items-start gap-2.5">
+                          {renderStatusDot(micDiagState)}
+                          <div className="min-w-0 flex-1">
+                            <div className="font-medium text-white">
+                              {t.diagMicPermissionLabel}
+                            </div>
+                            <div className="text-[var(--theme-muted)]">
+                              {micDiagText}
+                            </div>
+                          </div>
                         </div>
-                        <div className="text-[var(--theme-muted)]">
-                          {micDiagText}
-                        </div>
-                      </div>
-                    </div>
 
-                    <div className="flex items-start gap-2.5">
-                      {renderStatusDot(pwaDiagState)}
-                      <div className="min-w-0 flex-1">
-                        <div className="font-medium text-white">
-                          {t.diagPwaLabel}
+                        <div className="flex items-start gap-2.5">
+                          {renderStatusDot(pwaDiagState)}
+                          <div className="min-w-0 flex-1">
+                            <div className="font-medium text-white">
+                              {t.diagPwaLabel}
+                            </div>
+                            <div className="text-[var(--theme-muted)]">
+                              {pwaDiagText}
+                            </div>
+                          </div>
                         </div>
-                        <div className="text-[var(--theme-muted)]">
-                          {pwaDiagText}
-                        </div>
-                      </div>
-                    </div>
+                      </>
+                    )}
                   </div>
 
-                  <p className="mt-3 border-t border-white/10 pt-2.5 text-[11px] leading-relaxed text-[var(--theme-muted)]">
-                    {t.diagLocalSslNote}
-                  </p>
+                  {!mobileLinkConnected ? (
+                    <p className="mt-3 border-t border-white/10 pt-2.5 text-[11px] leading-relaxed text-[var(--theme-muted)]">
+                      {t.diagLocalSslNote}
+                    </p>
+                  ) : null}
                 </div>
               </>
             ) : null}
@@ -1860,7 +2002,7 @@ export function SettingsModal({
           </div>
 
           {/* Modal Footer Actions & Authorship Watermark */}
-          <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-white/10 bg-black/25 px-6 py-4">
+          <div className="-mx-4 -mb-4 flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-white/10 bg-black/25 px-4 py-3 sm:mx-0 sm:mb-0 sm:px-6 sm:py-4">
             <div className="flex items-center gap-2 select-none">
               <span className="text-[11px] font-medium tracking-wide text-white/40">
                 {t.settingsWatermark}

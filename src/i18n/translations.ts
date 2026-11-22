@@ -80,6 +80,9 @@ export interface UIStrings {
   tabConnectionModel: string;
   tabVisualStudio: string;
   tabDataBackup: string;
+  tabConnectionShort: string;
+  tabVisualShort: string;
+  tabDataShort: string;
   visualPreviewTitle: string;
   visualPreviewAssistantMsg: string;
   visualPreviewUserMsg: string;
@@ -161,6 +164,8 @@ export interface UIStrings {
   diagMicDenied: string;
   diagMicUnknown: string;
   diagLocalSslNote: string;
+  diagMobileLinkActiveTitle: string;
+  diagMobileLinkActiveSubtitle: string;
   backupTitle: string;
   backupSubtitle: string;
   exportBackupButton: string;
@@ -298,6 +303,26 @@ export interface UIStrings {
   ollamaUnexpectedError: string;
   ollamaNoResponseFallback: string;
   storageLimitError: string;
+  mobileLinkButton: string;
+  mobileLinkTitle: string;
+  mobileLinkSubtitle: string;
+  mobileLinkStatusActive: string;
+  mobileLinkStatusStopped: string;
+  mobileLinkToggleLabel: string;
+  mobileLinkLanTab: string;
+  mobileLinkTailscaleTab: string;
+  mobileLinkCopyUrl: string;
+  mobileLinkCopied: string;
+  mobileLinkNoUrlsLan: string;
+  mobileLinkNoUrlsTailscale: string;
+  mobileLinkSecurityBadge: string;
+  mobileLinkConnectedClients: (count: number) => string;
+  mobileLinkLastSync: (time: string) => string;
+  mobileLinkNeverSynced: string;
+  mobileLinkStarting: string;
+  mobileLinkStartError: string;
+  mobileLinkRefreshToken: string;
+  mobileLinkScanHint: string;
   themes: Record<ThemeId, { name: string; subtitle: string }>;
   bubbleSchemes: Record<BubbleSchemeId, { name: string; subtitle: string }>;
 }
@@ -393,6 +418,9 @@ export const TRANSLATIONS: Record<Language, UIStrings> = {
     tabConnectionModel: 'Connection & Model',
     tabVisualStudio: 'Visual Studio',
     tabDataBackup: 'Data & Backup',
+    tabConnectionShort: 'Model',
+    tabVisualShort: 'Visual',
+    tabDataShort: 'Data',
     visualPreviewTitle: 'Live Chat Preview',
     visualPreviewAssistantMsg:
       '*Leans against the obsidian balustrade, glancing over with a quiet smile.* Ready whenever you are.',
@@ -487,6 +515,9 @@ export const TRANSLATIONS: Record<Language, UIStrings> = {
     diagMicUnknown: 'Browser controls permission on mic click',
     diagLocalSslNote:
       'Localhost (http://localhost) is automatically treated as a Secure Context by modern browsers. For LAN IP access, enable VITE_LOCAL_HTTPS="true" with SSL_KEY_FILE & SSL_CERT_FILE in .env.',
+    diagMobileLinkActiveTitle: 'Atrium Mobile Link Active — Local Bridge',
+    diagMobileLinkActiveSubtitle:
+      'Ollama traffic is securely proxied through /api on your PC. HTTPS & Service Worker warnings are skipped on this local link.',
     backupTitle: 'Data Backup & Transfer',
     backupSubtitle:
       'Export or import all custom characters, uploaded wallpapers, settings, and chat histories.',
@@ -598,7 +629,7 @@ export const TRANSLATIONS: Record<Language, UIStrings> = {
     outroSessionSaved: 'Session saved locally in Atrium',
     outroCraftedBy: 'Crafted by Miko',
     reopenAtrium: 'Reopen Atrium',
-    appVersion: 'v1.4.1 (Hardened)',
+    appVersion: 'v1.5.0 (Hardened)',
     settingsWatermark: 'Atrium Engine • Original Architecture by Miko',
     ollamaStatusChecking: 'Ollama...',
     ollamaStatusReady: 'Ollama Ready',
@@ -697,6 +728,32 @@ export const TRANSLATIONS: Record<Language, UIStrings> = {
         subtitle: 'Neutral frosted graphite for maximum wallpaper focus',
       },
     },
+    mobileLinkButton: 'Mobile',
+    mobileLinkTitle: 'Atrium Mobile Link',
+    mobileLinkSubtitle:
+      'Stream your local Ollama models and sync chats directly to your phone over Wi-Fi or Tailscale.',
+    mobileLinkStatusActive: 'Bridge Active',
+    mobileLinkStatusStopped: 'Bridge Stopped',
+    mobileLinkToggleLabel: 'Mobile Link Server',
+    mobileLinkLanTab: 'Wi-Fi LAN',
+    mobileLinkTailscaleTab: 'Tailscale VPN',
+    mobileLinkCopyUrl: 'Copy URL',
+    mobileLinkCopied: 'Copied!',
+    mobileLinkNoUrlsLan:
+      'No private Wi-Fi/LAN IPv4 address detected on this PC.',
+    mobileLinkNoUrlsTailscale:
+      'No Tailscale (100.*) interface detected. Connect Tailscale for remote access outside home Wi-Fi.',
+    mobileLinkSecurityBadge:
+      'Ephemeral 24-byte session token · HttpOnly cookie · DPAPI API keys stay on this PC',
+    mobileLinkConnectedClients: (count) =>
+      `${count} ${count === 1 ? 'device connected' : 'devices connected'}`,
+    mobileLinkLastSync: (time) => `Last sync: ${time}`,
+    mobileLinkNeverSynced: 'Waiting for first sync',
+    mobileLinkStarting: 'Starting Mobile Link bridge...',
+    mobileLinkStartError: 'Could not start Mobile Link server.',
+    mobileLinkRefreshToken: 'Rotate Token',
+    mobileLinkScanHint:
+      'Scan with your phone camera to open Atrium and install as a PWA.',
   },
   es: {
     appTitle: 'Atrium',
@@ -789,6 +846,9 @@ export const TRANSLATIONS: Record<Language, UIStrings> = {
     tabConnectionModel: 'Conexión y Modelo',
     tabVisualStudio: 'Estudio Visual',
     tabDataBackup: 'Datos y Copias',
+    tabConnectionShort: 'Conexión',
+    tabVisualShort: 'Estudio',
+    tabDataShort: 'Datos',
     visualPreviewTitle: 'Vista Previa en Vivo',
     visualPreviewAssistantMsg:
       '*Se apoya en la baranda de obsidiana y te mira con una sonrisa serena.* Listo cuando tú quieras.',
@@ -883,6 +943,9 @@ export const TRANSLATIONS: Record<Language, UIStrings> = {
     diagMicUnknown: 'El navegador solicitará permiso al usarlo',
     diagLocalSslNote:
       'Localhost (http://localhost) se considera automáticamente un Contexto Seguro. Para acceso por IP en red local, activa VITE_LOCAL_HTTPS="true" con SSL_KEY_FILE y SSL_CERT_FILE en .env.',
+    diagMobileLinkActiveTitle: 'Atrium Mobile Link Active — Local Bridge',
+    diagMobileLinkActiveSubtitle:
+      'El tráfico de Ollama se redirige de forma segura por /api en tu PC. Los avisos de HTTPS y Service Worker no aplican en este puente local.',
     backupTitle: 'Copia de Seguridad y Transferencia',
     backupSubtitle:
       'Exporta o importa todos tus personajes personalizados, fondos subidos, ajustes e historiales de chat.',
@@ -994,7 +1057,7 @@ export const TRANSLATIONS: Record<Language, UIStrings> = {
     outroSessionSaved: 'Sesión guardada localmente en Atrium',
     outroCraftedBy: 'Crafted by Miko',
     reopenAtrium: 'Reabrir Atrium',
-    appVersion: 'v1.4.1 (Hardened)',
+    appVersion: 'v1.5.0 (Hardened)',
     settingsWatermark: 'Atrium Engine • Original Architecture by Miko',
     ollamaStatusChecking: 'Ollama...',
     ollamaStatusReady: 'Ollama Listo',
@@ -1093,5 +1156,31 @@ export const TRANSLATIONS: Record<Language, UIStrings> = {
         subtitle: 'Grafito esmerilado neutro para destacar el fondo',
       },
     },
+    mobileLinkButton: 'Móvil',
+    mobileLinkTitle: 'Atrium Mobile Link',
+    mobileLinkSubtitle:
+      'Usa tus modelos locales de Ollama y sincroniza tus chats directo en tu teléfono vía Wi-Fi o Tailscale.',
+    mobileLinkStatusActive: 'Puente Activo',
+    mobileLinkStatusStopped: 'Puente Detenido',
+    mobileLinkToggleLabel: 'Servidor Mobile Link',
+    mobileLinkLanTab: 'Wi-Fi LAN',
+    mobileLinkTailscaleTab: 'Tailscale VPN',
+    mobileLinkCopyUrl: 'Copiar URL',
+    mobileLinkCopied: '¡Copiado!',
+    mobileLinkNoUrlsLan:
+      'No se detectó una IP IPv4 privada de Wi-Fi/LAN en esta PC.',
+    mobileLinkNoUrlsTailscale:
+      'No se detectó interfaz Tailscale (100.*). Conecta Tailscale para acceder fuera de tu Wi-Fi.',
+    mobileLinkSecurityBadge:
+      'Token efímero de 24 bytes · Cookie HttpOnly · Claves DPAPI aisladas en esta PC',
+    mobileLinkConnectedClients: (count) =>
+      `${count} ${count === 1 ? 'dispositivo conectado' : 'dispositivos conectados'}`,
+    mobileLinkLastSync: (time) => `Última sinc.: ${time}`,
+    mobileLinkNeverSynced: 'Esperando primera sincronización',
+    mobileLinkStarting: 'Iniciando puente Mobile Link...',
+    mobileLinkStartError: 'No se pudo iniciar el servidor Mobile Link.',
+    mobileLinkRefreshToken: 'Rotar Token',
+    mobileLinkScanHint:
+      'Escanea con la cámara de tu teléfono para abrir Atrium e instalarla como PWA.',
   },
 };

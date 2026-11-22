@@ -226,14 +226,14 @@ export function CharacterModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-2 backdrop-blur-sm sm:p-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby="character-modal-title"
       onClick={onClose}
     >
       <div
-        className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-[28px] border border-[var(--theme-border)] bg-[var(--theme-glass-strong)] p-6 text-[var(--theme-text)] shadow-[0_24px_80px_rgba(0,0,0,0.65)] backdrop-blur-2xl"
+        className="max-h-[88dvh] w-[95vw] max-w-2xl overflow-y-auto rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-glass-strong)] p-4 text-[var(--theme-text)] shadow-[0_24px_80px_rgba(0,0,0,0.65)] backdrop-blur-2xl sm:max-h-[92vh] sm:w-full sm:rounded-[28px] sm:p-6"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-4">
@@ -251,7 +251,7 @@ export function CharacterModal({
             <div>
               <h2
                 id="character-modal-title"
-                className="font-display text-xl font-semibold text-white"
+                className="font-display text-xl font-semibold text-white sm:text-2xl"
               >
                 {editingCharacter
                   ? t.editCharacterTitle

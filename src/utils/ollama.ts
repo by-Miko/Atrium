@@ -1,4 +1,5 @@
 import type { ApiProvider, OllamaModelTag } from '../types/chat';
+import { getMobileLinkSessionToken } from './mobileSync';
 
 export const DEFAULT_OLLAMA_URL = 'http://localhost:11434';
 export const DEFAULT_OPENAI_URL = 'http://localhost:1234/v1';
@@ -43,6 +44,13 @@ export const OPENAI_COMPAT_PRESETS: OpenAICompatPreset[] = [
 
 export function detectOpenAIPresetId(rawUrl: string): OpenAICompatPresetId {
   const normalized = normalizeBaseUrl(rawUrl, DEFAULT_OPENAI_URL).toLowerCase();
+  if (
+    normalized === '/v1' ||
+    normalized === 'http://127.0.0.1:1234/v1' ||
+    normalized === 'http://[::1]:1234/v1'
+  ) {
+    return 'lmstudio';
+  }
   const matched = OPENAI_COMPAT_PRESETS.find(
     (preset) => preset.baseUrl.toLowerCase() === normalized
   );
@@ -104,6 +112,46 @@ function isLocalOrPrivateHttpHost(rawHostname: string): boolean {
   return false;
 }
 
+export function isLocalLoopbackProviderUrl(rawUrl?: string): boolean {
+  if (typeof rawUrl !== 'string') return false;
+  const trimmed = rawUrl.trim();
+  if (!trimmed) return false;
+  if (
+    trimmed === '/api' ||
+    trimmed === '/' ||
+    trimmed === '/v1' ||
+    trimmed === '/v1/'
+  ) {
+    return true;
+  }
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return false;
+    }
+    const host = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, '');
+    return host === 'localhost' || host === '127.0.0.1' || host === '::1';
+  } catch {
+    return false;
+  }
+}
+
+export function isPublicHttpsProviderUrl(rawUrl?: string): boolean {
+  if (typeof rawUrl !== 'string') return false;
+  const trimmed = rawUrl.trim();
+  if (!trimmed || trimmed.startsWith('/')) return false;
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol !== 'https:') return false;
+    if (parsed.username || parsed.password) return false;
+    if (isBlockedMetadataOrLinkLocalHost(parsed.hostname)) return false;
+    if (isLocalOrPrivateHttpHost(parsed.hostname)) return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function validateProviderBaseUrl(
   rawUrl: string,
   fallback = DEFAULT_OLLAMA_URL
@@ -111,6 +159,14 @@ export function validateProviderBaseUrl(
   const trimmed = rawUrl.trim();
   if (!trimmed) {
     return { valid: true, normalized: fallback };
+  }
+
+  if (trimmed === '/api' || trimmed === '/') {
+    return { valid: true, normalized: '/api' };
+  }
+
+  if (trimmed === '/v1' || trimmed === '/v1/') {
+    return { valid: true, normalized: '/v1' };
   }
 
   if (/[\u0000-\u001F\u007F\s]/.test(trimmed)) {
@@ -198,6 +254,53 @@ export function normalizeOllamaUrl(rawUrl: string): string {
   return normalizeBaseUrl(rawUrl, DEFAULT_OLLAMA_URL);
 }
 
+function resolveOllamaEndpoint(
+  normalizedBaseUrl: string,
+  endpointPath: '/api/tags' | '/api/chat'
+): string {
+  if (normalizedBaseUrl === '/api') {
+    return endpointPath;
+  }
+  return `${normalizedBaseUrl}${endpointPath}`;
+}
+
+function isRelativeOrSameOriginUrl(targetUrl: string): boolean {
+  if (targetUrl.startsWith('/') && !targetUrl.startsWith('//')) {
+    return true;
+  }
+  if (typeof window === 'undefined') return false;
+  try {
+    return (
+      new URL(targetUrl, window.location.origin).origin ===
+      window.location.origin
+    );
+  } catch {
+    return false;
+  }
+}
+
+function getMobileLinkRequestOptions(
+  targetUrl: string,
+  baseHeaders: Record<string, string> = {}
+): {
+  headers: Record<string, string>;
+  credentials?: RequestCredentials;
+} {
+  if (!isRelativeOrSameOriginUrl(targetUrl)) {
+    return { headers: baseHeaders };
+  }
+  const token = getMobileLinkSessionToken();
+  return {
+    credentials: 'same-origin',
+    headers: token
+      ? {
+          ...baseHeaders,
+          'X-Atrium-Link-Token': token,
+        }
+      : baseHeaders,
+  };
+}
+
 export function formatModelSize(bytes?: number): string {
   if (!bytes || bytes <= 0) return '';
   const gb = bytes / (1024 * 1024 * 1024);
@@ -269,11 +372,17 @@ export async function fetchOllamaModels(
   signal?: AbortSignal
 ): Promise<OllamaModelTag[]> {
   const baseUrl = assertValidProviderUrl(rawUrl, DEFAULT_OLLAMA_URL);
+  const endpoint = resolveOllamaEndpoint(baseUrl, '/api/tags');
+  const reqOpts = getMobileLinkRequestOptions(endpoint);
   let response: Response;
 
   try {
-    response = await fetch(`${baseUrl}/api/tags`, {
+    response = await fetch(endpoint, {
       method: 'GET',
+      ...(reqOpts.credentials ? { credentials: reqOpts.credentials } : {}),
+      ...(Object.keys(reqOpts.headers).length > 0
+        ? { headers: reqOpts.headers }
+        : {}),
       signal,
     });
   } catch (err) {
@@ -308,12 +417,18 @@ export async function fetchOpenAICompatibleModels(
   signal?: AbortSignal
 ): Promise<OllamaModelTag[]> {
   const baseUrl = assertValidProviderUrl(rawUrl, DEFAULT_OPENAI_URL);
+  const endpoint = `${baseUrl}/models`;
+  const reqOpts = getMobileLinkRequestOptions(
+    endpoint,
+    buildOpenAIHeaders(baseUrl, apiKey, false)
+  );
   let response: Response;
 
   try {
-    response = await fetch(`${baseUrl}/models`, {
+    response = await fetch(endpoint, {
       method: 'GET',
-      headers: buildOpenAIHeaders(baseUrl, apiKey, false),
+      ...(reqOpts.credentials ? { credentials: reqOpts.credentials } : {}),
+      headers: reqOpts.headers,
       signal,
     });
   } catch (err) {
@@ -412,14 +527,17 @@ export async function streamOllamaChat({
   onDone,
 }: StreamChatParams): Promise<void> {
   const normalizedUrl = assertValidProviderUrl(baseUrl, DEFAULT_OLLAMA_URL);
+  const endpoint = resolveOllamaEndpoint(normalizedUrl, '/api/chat');
+  const reqOpts = getMobileLinkRequestOptions(endpoint, {
+    'Content-Type': 'application/json',
+  });
   let response: Response;
 
   try {
-    response = await fetch(`${normalizedUrl}/api/chat`, {
+    response = await fetch(endpoint, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      ...(reqOpts.credentials ? { credentials: reqOpts.credentials } : {}),
+      headers: reqOpts.headers,
       body: JSON.stringify({
         model,
         messages,
@@ -437,7 +555,7 @@ export async function streamOllamaChat({
       throw err;
     }
     throw new Error(
-      `Connection failed to ${normalizedUrl}/api/chat. Check that Ollama is running and OLLAMA_ORIGINS permits browser requests.`
+      `Connection failed to ${endpoint}. Check that Ollama is running and OLLAMA_ORIGINS permits browser requests.`
     );
   }
 
@@ -575,12 +693,18 @@ export async function streamOpenAICompatibleChat({
   onDone,
 }: StreamChatParams): Promise<void> {
   const normalizedUrl = assertValidProviderUrl(baseUrl, DEFAULT_OPENAI_URL);
+  const endpoint = `${normalizedUrl}/chat/completions`;
+  const reqOpts = getMobileLinkRequestOptions(
+    endpoint,
+    buildOpenAIHeaders(normalizedUrl, apiKey, true)
+  );
   let response: Response;
 
   try {
-    response = await fetch(`${normalizedUrl}/chat/completions`, {
+    response = await fetch(endpoint, {
       method: 'POST',
-      headers: buildOpenAIHeaders(normalizedUrl, apiKey, true),
+      ...(reqOpts.credentials ? { credentials: reqOpts.credentials } : {}),
+      headers: reqOpts.headers,
       body: JSON.stringify({
         model,
         messages,
