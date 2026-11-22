@@ -5,10 +5,10 @@ https://github.com/user-attachments/assets/2ef36b84-c708-4844-826a-67f779d8919b
 
 
 
-# Atrium — v1.4.1 (Hardened)
+# Atrium — v1.5.0 (Hardened)
 
 **Privacy-First *Liquid Glass* Roleplay Chat Studio**  
-*Atrium Engine v1.4.1 • Original Architecture by Miko*
+*Atrium Engine v1.5.0 • Original Architecture by Miko*
 
 [English](#english) · [Español](#español)
 
@@ -34,7 +34,7 @@ https://github.com/user-attachments/assets/2ef36b84-c708-4844-826a-67f779d8919b
 ### Quick Start for Windows Users
 
 1. **Download & Launch Atrium**
-   - Run **`Atrium-Portable-1.4.1.exe`** (standalone portable executable, no installation required) or install **`Atrium-Setup-1.4.0.exe`** (standard installer that preserves your `atrium-db` library across updates).
+   - Run **`Atrium-Portable-1.5.0.exe`** (standalone portable executable, no installation required) or install **`Atrium-Setup-1.5.0.exe`** (standard installer that preserves your `atrium-db` library across updates).
    - *Windows SmartScreen Note:* Because Atrium is an independent, self-published open-source build without a paid commercial EV code-signing certificate, Windows SmartScreen may display *"Windows protected your PC"*. Click **"More info"** → **"Run anyway"** to launch safely.
 2. **Connect Your AI Engine**
    - **Local Ollama (Default):** Install [Ollama](https://ollama.com), pull a model (e.g., `ollama pull llama3.2`), and set `OLLAMA_ORIGINS=*` so local desktop/web requests connect cleanly.
@@ -93,7 +93,7 @@ npm run build:mac
 ### Inicio Rápido para Usuarios de Windows
 
 1. **Descarga y Abre Atrium**
-   - Ejecuta **`Atrium-Portable-1.4.1.exe`** (versión portátil sin instalación) o instala **`Atrium-Setup-1.4.1.exe`** (instalador estándar que conserva tu base `atrium-db` entre actualizaciones).
+   - Ejecuta **`Atrium-Portable-1.5.0.exe`** (versión portátil sin instalación) o instala **`Atrium-Setup-1.5.0.exe`** (instalador estándar que conserva tu base `atrium-db` entre actualizaciones).
    - *Nota sobre Windows SmartScreen:* Al ser un proyecto independiente y de código abierto sin certificado comercial de firma de código, Windows SmartScreen puede mostrar *"Windows protegió su PC"*. Haz clic en **"Más información"** → **"Ejecutar de todas formas"** para iniciar con seguridad.
 2. **Conecta tu Motor de IA**
    - **Ollama Local (Predeterminado):** Instala [Ollama](https://ollama.com), descarga un modelo (ej. `ollama pull llama3.2`) y configura la variable `OLLAMA_ORIGINS=*` para permitir la conexión local.
