@@ -12,6 +12,12 @@ https://github.com/user-attachments/assets/2ef36b84-c708-4844-826a-67f779d8919b
 
 [English](#english) · [Español](#español)
 
+[![Live Web Demo](https://img.shields.io/badge/Live_Web_Demo-by--miko.github.io-8b5cf6?style=for-the-badge)](https://by-miko.github.io/Atrium/)
+[![Download Windows](https://img.shields.io/badge/Windows_v1.5.0-Download_.exe-e5cca0?style=for-the-badge)](https://github.com/by-Miko/Atrium/releases/latest)
+[![Security Policy](https://img.shields.io/badge/Security-v1.5.0_Hardened-18181b?style=for-the-badge)](./SECURITY.md)
+
+> **Try Atrium instantly in your browser (no install required):** [**https://by-miko.github.io/Atrium/**](https://by-miko.github.io/Atrium/)
+
 ---
 
 <a id="english"></a>
