@@ -75,6 +75,7 @@ interface ChatWindowProps {
   selectedModel: string;
   ollamaUrl: string;
   provider?: ApiProvider;
+  isWebDemo?: boolean;
   userPersona: UserPersona;
   wallpaperFit: WallpaperFitMode;
   parallaxEnabled: boolean;
@@ -118,6 +119,7 @@ export function ChatWindow({
   selectedModel,
   ollamaUrl,
   provider = 'ollama',
+  isWebDemo = false,
   userPersona,
   wallpaperFit,
   parallaxEnabled,
@@ -1670,7 +1672,11 @@ export function ChatWindow({
 
                   <div className="mt-1.5 hidden items-center justify-between gap-3 px-3 text-[10.5px] leading-none [text-shadow:0_1px_2px_rgba(0,0,0,0.85)] sm:flex">
                     <span className="truncate text-white/65">
-                      {t.composerHint(ollamaUrl)}
+                      {t.composerHint(
+                        isWebDemo
+                          ? 'atrium-web-demo-8b (Simulated Stream)'
+                          : ollamaUrl
+                      )}
                     </span>
                     <span
                       className={`shrink-0 font-mono tabular-nums ${charCountClass}`}

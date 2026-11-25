@@ -27,13 +27,18 @@ function getOptionalHttpsConfig() {
 
 export default defineConfig(() => {
   const httpsConfig = getOptionalHttpsConfig();
+  const isGitHubPages = process.env.GITHUB_PAGES === 'true';
 
   return {
-    base: './',
+    base: isGitHubPages ? '/Atrium/' : './',
+    define: {
+      __ATRIUM_PWA_DISABLED__: JSON.stringify(isGitHubPages),
+    },
     plugins: [
       react(),
       tailwindcss(),
       VitePWA({
+        disable: isGitHubPages,
         registerType: 'autoUpdate',
         manifestFilename: 'manifest.json',
         includeAssets: ['apple-touch-icon.png', 'icon.svg'],
@@ -105,7 +110,7 @@ export default defineConfig(() => {
           ],
         },
         devOptions: {
-          enabled: true,
+          enabled: !isGitHubPages,
           type: 'module',
         },
       }),

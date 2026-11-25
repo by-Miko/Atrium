@@ -261,6 +261,7 @@ export interface UIStrings {
   ollamaStatusOffline: string;
   apiStatusReady: string;
   apiStatusSetup: string;
+  webDemoStatusReady: string;
   cancel: string;
   saveSettings: string;
   noModelsInstalledMsg: string;
@@ -636,6 +637,7 @@ export const TRANSLATIONS: Record<Language, UIStrings> = {
     ollamaStatusOffline: 'Ollama Offline · Setup',
     apiStatusReady: 'API Ready',
     apiStatusSetup: 'API · Select Model',
+    webDemoStatusReady: 'Web Demo • Live Sim',
     cancel: 'Cancel',
     saveSettings: 'Save Settings',
     noModelsInstalledMsg:
@@ -1064,6 +1066,7 @@ export const TRANSLATIONS: Record<Language, UIStrings> = {
     ollamaStatusOffline: 'Ollama Offline · Configurar',
     apiStatusReady: 'API Lista',
     apiStatusSetup: 'API · Elegir Modelo',
+    webDemoStatusReady: 'Demo Web • Simulación en Vivo',
     cancel: 'Cancelar',
     saveSettings: 'Guardar Ajustes',
     noModelsInstalledMsg:
