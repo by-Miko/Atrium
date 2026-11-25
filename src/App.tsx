@@ -13,6 +13,7 @@ import { GrandIntroSplash } from './components/GrandIntroSplash';
 import { ImageLightbox } from './components/ImageLightbox';
 import { IntroSplash } from './components/IntroSplash';
 import { LandingShell } from './components/LandingShell';
+import { SocialPreviewBanner } from './components/SocialPreviewBanner';
 import { MobileLinkModal } from './components/MobileLinkModal';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { OllamaSetupHelper } from './components/OllamaSetupHelper';
@@ -268,6 +269,10 @@ export default function App() {
         initialMobileLinkSession.hadUrlToken || initialMobileLinkSession.token
       )
   );
+  const [showSocialPreview] = useState<boolean>(() => {
+    if (isElectronHost || typeof window === 'undefined') return false;
+    return new URLSearchParams(window.location.search).get('social-preview') === '1';
+  });
   const [showWebLanding, setShowWebLanding] = useState<boolean>(() =>
     isWebEdition()
   );
@@ -2495,6 +2500,10 @@ export default function App() {
     },
     [settings.apiKey, settings.baseUrl, settings.openaiBaseUrl, stopStreaming, streamingCharacterId]
   );
+
+  if (showSocialPreview) {
+    return <SocialPreviewBanner />;
+  }
 
   if (showWebLanding) {
     return <LandingShell onEnterApp={() => setShowWebLanding(false)} />;
