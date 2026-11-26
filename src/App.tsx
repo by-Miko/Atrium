@@ -70,12 +70,17 @@ import {
   DEFAULT_OLLAMA_SETTINGS,
   DEFAULT_USER_PERSONA,
   STORAGE_KEYS,
+  applyCharacterOrder,
   hydrateCharacters,
   hydrateVisualSettings,
   idbSet,
   loadAllPersistedState,
   loadMobileSyncUpdatedAt,
+  loadSavedCharacterOrder,
+  loadSavedLobbyBackdropMode,
   saveApiKeySecurely,
+  saveCharacterOrder,
+  saveLobbyBackdropMode,
   saveMobileSyncUpdatedAt,
   stripSecretFromSettings,
 } from './utils/storage';
@@ -204,7 +209,12 @@ function resolveInitialIntroMode(): 'grand' | 'quick' {
 export default function App() {
   const [showLanding, setShowLanding] = React.useState(() => isWebEdition() && !new URLSearchParams(window.location.search).has('app'));
   if (showLanding) return <LandingShell onEnterApp={() => setShowLanding(false)} />;
-  const [characters, setCharacters] = useState<Character[]>(DEFAULT_CHARACTERS);
+  const [characterOrder, setCharacterOrder] = useState<string[]>(() =>
+    loadSavedCharacterOrder()
+  );
+  const [characters, setCharacters] = useState<Character[]>(() =>
+    applyCharacterOrder(DEFAULT_CHARACTERS, loadSavedCharacterOrder())
+  );
   const [activeCharacterId, setActiveCharacterId] = useState<string>(
     DEFAULT_CHARACTERS[0].id
   );
@@ -226,7 +236,10 @@ export default function App() {
   const [wallpaperFit, setWallpaperFit] = useState<WallpaperFitMode>('cover');
   const [parallaxEnabled, setParallaxEnabled] = useState(true);
   const [visualSettings, setVisualSettings] = useState<VisualStudioSettings>(
-    DEFAULT_VISUAL_STUDIO_SETTINGS
+    () => ({
+      ...DEFAULT_VISUAL_STUDIO_SETTINGS,
+      lobbyBackdropMode: loadSavedLobbyBackdropMode(),
+    })
   );
   const [isStorageReady, setIsStorageReady] = useState(false);
 
@@ -401,6 +414,7 @@ export default function App() {
         storyMemories: cur.storyMemories,
         preferences: {
           activeCharacterId: cur.activeCharacterId,
+          characterOrder: cur.characterOrder,
           userPersona: cur.userPersona,
           themeId: cur.themeId,
           bubbleSchemeId: cur.bubbleSchemeId,
@@ -448,15 +462,31 @@ export default function App() {
       syncUpdatedAtRef.current = remote.updatedAt;
       void saveMobileSyncUpdatedAt(remote.updatedAt);
 
+      const prefs = remote.preferences ?? {};
+      const remoteOrder = Array.isArray(prefs.characterOrder)
+        ? prefs.characterOrder.filter(
+            (id): id is string => typeof id === 'string' && id.trim().length > 0
+          )
+        : null;
+      const effectiveOrder =
+        remoteOrder && remoteOrder.length > 0
+          ? remoteOrder
+          : loadSavedCharacterOrder();
+      if (remoteOrder && remoteOrder.length > 0) {
+        setCharacterOrder(remoteOrder);
+        saveCharacterOrder(remoteOrder);
+      }
+
       const nextChars =
         Array.isArray(remote.characters) && remote.characters.length > 0
           ? hydrateCharacters(remote.characters)
           : null;
       if (nextChars) {
-        setCharacters(nextChars);
+        setCharacters(applyCharacterOrder(nextChars, effectiveOrder));
+      } else if (effectiveOrder.length > 0) {
+        setCharacters((prev) => applyCharacterOrder(prev, effectiveOrder));
       }
 
-      const prefs = remote.preferences ?? {};
       if (
         typeof prefs.activeCharacterId === 'string' &&
         prefs.activeCharacterId
@@ -751,7 +781,17 @@ export default function App() {
           }
         : loaded.settings;
 
-      setCharacters(loaded.characters);
+      const persistedOrder = loadSavedCharacterOrder();
+      const orderedLoadedChars = applyCharacterOrder(
+        loaded.characters,
+        persistedOrder
+      );
+      setCharacters(orderedLoadedChars);
+      setCharacterOrder(
+        persistedOrder.length > 0
+          ? persistedOrder
+          : orderedLoadedChars.map((c) => c.id)
+      );
       setActiveCharacterId(loaded.activeCharacterId);
       setConversations(loaded.conversations);
       setStoryMemories(loaded.storyMemories);
@@ -901,10 +941,16 @@ export default function App() {
   useEffect(() => {
     if (!isStorageReady) return;
     void idbSet(STORAGE_KEYS.visualSettings, visualSettings);
+    saveLobbyBackdropMode(
+      visualSettings.lobbyBackdropMode === 'obsidian-static'
+        ? 'obsidian-static'
+        : 'orbital-clouds'
+    );
   }, [isStorageReady, visualSettings]);
 
   const latestSyncSnapshotDataRef = useRef({
     characters,
+    characterOrder,
     activeCharacterId: activeCharacter.id,
     conversations,
     storyMemories,
@@ -919,6 +965,7 @@ export default function App() {
   });
   latestSyncSnapshotDataRef.current = {
     characters,
+    characterOrder,
     activeCharacterId: activeCharacter.id,
     conversations,
     storyMemories,
@@ -979,6 +1026,7 @@ export default function App() {
             storyMemories: cur.storyMemories,
             preferences: {
               activeCharacterId: cur.activeCharacterId,
+              characterOrder: cur.characterOrder,
               userPersona: cur.userPersona,
               themeId: cur.themeId,
               bubbleSchemeId: cur.bubbleSchemeId,
@@ -1065,6 +1113,7 @@ export default function App() {
         storyMemories: cur.storyMemories,
         preferences: {
           activeCharacterId: cur.activeCharacterId,
+          characterOrder: cur.characterOrder,
           userPersona: cur.userPersona,
           themeId: cur.themeId,
           bubbleSchemeId: cur.bubbleSchemeId,
@@ -1129,6 +1178,7 @@ export default function App() {
   }, [
     activeCharacter.id,
     bubbleSchemeId,
+    characterOrder,
     characters,
     conversations,
     isElectronHost,
@@ -1189,6 +1239,7 @@ export default function App() {
         storyMemories: cur.storyMemories,
         preferences: {
           activeCharacterId: cur.activeCharacterId,
+          characterOrder: cur.characterOrder,
           userPersona: overrides?.userPersona ?? cur.userPersona,
           themeId: cur.themeId,
           bubbleSchemeId: cur.bubbleSchemeId,
@@ -2408,25 +2459,54 @@ export default function App() {
   );
 
   const handleSaveCharacter = useCallback((savedChar: Character) => {
+    const storedOrder = loadSavedCharacterOrder();
+    const baseOrder =
+      storedOrder.length > 0
+        ? storedOrder
+        : charactersRef.current.map((c) => c.id);
+    const nextOrder = baseOrder.includes(savedChar.id)
+      ? baseOrder
+      : [savedChar.id, ...baseOrder];
+
+    saveCharacterOrder(nextOrder);
+    setCharacterOrder(nextOrder);
     setCharacters((prev) => {
       const exists = prev.some((c) => c.id === savedChar.id);
-      if (exists) {
-        return prev.map((c) => (c.id === savedChar.id ? savedChar : c));
-      }
-      return [savedChar, ...prev];
+      const updated = exists
+        ? prev.map((c) => (c.id === savedChar.id ? savedChar : c))
+        : [savedChar, ...prev];
+      return applyCharacterOrder(updated, nextOrder);
     });
     setActiveCharacterId(savedChar.id);
   }, []);
 
+  const handleReorderCharacters = useCallback((orderedIds: string[]) => {
+    const cleanOrder = orderedIds.filter(
+      (id): id is string => typeof id === 'string' && id.trim().length > 0
+    );
+    saveCharacterOrder(cleanOrder);
+    setCharacterOrder(cleanOrder);
+    setCharacters((prev) => applyCharacterOrder(prev, cleanOrder));
+  }, []);
+
   const handleDeleteCharacter = useCallback(
     (id: string) => {
+      const storedOrder = loadSavedCharacterOrder();
+      const baseOrder =
+        storedOrder.length > 0
+          ? storedOrder
+          : charactersRef.current.map((c) => c.id);
+      const nextOrder = baseOrder.filter((entryId) => entryId !== id);
+      saveCharacterOrder(nextOrder);
+      setCharacterOrder(nextOrder);
+
       setCharacters((prev) => {
         if (prev.length <= 1) return prev;
         const filtered = prev.filter((c) => c.id !== id);
         if (activeCharacterId === id && filtered.length > 0) {
           setActiveCharacterId(filtered[0].id);
         }
-        return filtered;
+        return applyCharacterOrder(filtered, nextOrder);
       });
       setConversations((prev) => {
         const next = { ...prev };
@@ -2484,6 +2564,9 @@ export default function App() {
       }
       const hydrated = hydrateCharacters(parsed.characters);
       setCharacters(hydrated);
+      const importedOrder = hydrated.map((c) => c.id);
+      setCharacterOrder(importedOrder);
+      saveCharacterOrder(importedOrder);
       setActiveCharacterId(parsed.activeCharacterId);
       setConversations(parsed.conversations);
       if (parsed.storyMemories) {
@@ -2527,7 +2610,7 @@ export default function App() {
         setLanguage(parsed.language);
       }
       if (parsed.visualSettings) {
-        setVisualSettings(parsed.visualSettings);
+        setVisualSettings(hydrateVisualSettings(parsed.visualSettings));
       }
       setErrorMessage(null);
       return {
@@ -2628,6 +2711,7 @@ export default function App() {
                   setEditingCharacter(char);
                   setIsCharacterModalOpen(true);
                 }}
+                onReorderCharacters={handleReorderCharacters}
                 onOpenUserPersona={() => {
                   setSettingsFocusSection('persona');
                   setIsSettingsOpen(true);
@@ -2642,6 +2726,9 @@ export default function App() {
                   isElectronHost && window.electronAPI?.startMobileLink
                     ? () => setIsMobileLinkModalOpen(true)
                     : undefined
+                }
+                backdropMode={
+                  visualSettings.lobbyBackdropMode ?? 'orbital-clouds'
                 }
                 onExit={handleExitApp}
               />

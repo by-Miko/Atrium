@@ -402,6 +402,9 @@ export function computeMobileSyncContentFingerprint(
   const rawSettings = prefs.settings;
   const normalizedPrefs: Record<string, unknown> = {
     activeCharacterId: prefs.activeCharacterId ?? '',
+    characterOrder: Array.isArray(prefs.characterOrder)
+      ? prefs.characterOrder
+      : [],
     themeId: prefs.themeId ?? '',
     bubbleSchemeId: prefs.bubbleSchemeId ?? '',
     language: prefs.language ?? '',

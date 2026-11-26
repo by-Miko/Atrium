@@ -1,5 +1,5 @@
 import type { Character } from '../types/chat';
-import { readImageFileAsDataUrl } from './imageUpload';
+import { readImageFileAsDataUrl, sanitizeImageUrl } from './imageUpload';
 import { sanitizeRenderedText } from './sanitize';
 
 const PNG_SIGNATURE = [137, 80, 78, 71, 13, 10, 26, 10];
@@ -7,20 +7,67 @@ const MAX_PNG_FILE_BYTES = 15 * 1024 * 1024;
 const MAX_METADATA_CHUNK_BYTES = 4 * 1024 * 1024;
 const MAX_COMPRESSED_CHUNK_BYTES = 2 * 1024 * 1024;
 const MAX_DECOMPRESSED_BYTES = 2 * 1024 * 1024;
+const MAX_EXPORT_IMAGE_DIMENSION = 1024;
+const MAX_EMBEDDED_BACKGROUND_DATA_URL_LENGTH = 2_400_000;
+const PORTABLE_IMAGE_URL_REGEX =
+  /^(?:data:image\/(?:png|jpeg|jpg|webp|gif);base64,[A-Za-z0-9+/=]+|https?:\/\/\S+)$/i;
+
+function isPortableImageUrl(rawUrl: unknown): string | undefined {
+  const safeUrl = sanitizeImageUrl(rawUrl);
+  if (!safeUrl) return undefined;
+  return PORTABLE_IMAGE_URL_REGEX.test(safeUrl) ? safeUrl : undefined;
+}
+
+const CRC32_TABLE = (() => {
+  const table = new Uint32Array(256);
+  for (let n = 0; n < 256; n += 1) {
+    let c = n;
+    for (let k = 0; k < 8; k += 1) {
+      c = (c & 1) !== 0 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    }
+    table[n] = c >>> 0;
+  }
+  return table;
+})();
+
+function crc32(bytes: Uint8Array): number {
+  let c = 0xffffffff;
+  for (let i = 0; i < bytes.length; i += 1) {
+    c = CRC32_TABLE[(c ^ bytes[i]) & 0xff] ^ (c >>> 8);
+  }
+  return (c ^ 0xffffffff) >>> 0;
+}
+
+function encodeUtf8Base64(text: string): string {
+  const utf8Bytes = new TextEncoder().encode(text);
+  let binary = '';
+  const chunkSize = 0x8000;
+  for (let i = 0; i < utf8Bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...utf8Bytes.subarray(i, i + chunkSize));
+  }
+  return btoa(binary);
+}
 
 interface RawTavernCardData {
   name?: unknown;
+  char_name?: unknown;
   nickname?: unknown;
   description?: unknown;
+  char_persona?: unknown;
   personality?: unknown;
   scenario?: unknown;
+  world_scenario?: unknown;
   first_mes?: unknown;
+  char_greeting?: unknown;
   alternate_greetings?: unknown;
   mes_example?: unknown;
+  example_dialogue?: unknown;
   system_prompt?: unknown;
   post_history_instructions?: unknown;
   creator_notes?: unknown;
   tags?: unknown;
+  avatar?: unknown;
+  extensions?: unknown;
 }
 
 function isPngSignature(bytes: Uint8Array): boolean {
@@ -221,9 +268,12 @@ function buildSystemPromptFromCard(
 
   const systemPrompt = cleanString(data.system_prompt);
   const description = cleanString(data.description);
-  const personality = cleanString(data.personality);
-  const scenario = cleanString(data.scenario);
-  const mesExample = cleanString(data.mes_example);
+  const personality =
+    cleanString(data.personality) || cleanString(data.char_persona);
+  const scenario =
+    cleanString(data.scenario) || cleanString(data.world_scenario);
+  const mesExample =
+    cleanString(data.mes_example) || cleanString(data.example_dialogue);
   const postHistory = cleanString(data.post_history_instructions);
 
   if (systemPrompt) {
@@ -260,23 +310,166 @@ function buildSystemPromptFromCard(
   return sections.join('\n\n');
 }
 
+function hasTavernCardFields(obj: Record<string, unknown>): boolean {
+  const target =
+    obj.data && typeof obj.data === 'object' && !Array.isArray(obj.data)
+      ? (obj.data as Record<string, unknown>)
+      : obj;
+  const candidateKeys = [
+    'name',
+    'char_name',
+    'nickname',
+    'description',
+    'personality',
+    'char_persona',
+    'first_mes',
+    'char_greeting',
+    'system_prompt',
+    'scenario',
+    'world_scenario',
+  ];
+  return candidateKeys.some(
+    (key) => typeof target[key] === 'string' && String(target[key]).trim().length > 0
+  );
+}
+
+function buildCharacterFromCardObject(
+  parsedJson: Record<string, unknown>,
+  fallbackFileName: string,
+  portraitDataUrl?: string
+): Character {
+  const cardData = (
+    parsedJson.data &&
+    typeof parsedJson.data === 'object' &&
+    !Array.isArray(parsedJson.data)
+      ? parsedJson.data
+      : parsedJson
+  ) as RawTavernCardData;
+
+  const charName =
+    cleanString(cardData.name, 100) ||
+    cleanString(cardData.char_name, 100) ||
+    cleanString(cardData.nickname, 100) ||
+    fallbackFileName;
+
+  const rawTags = Array.isArray(cardData.tags)
+    ? cardData.tags
+        .filter((t): t is string => typeof t === 'string' && t.trim().length > 0)
+        .map((t) => sanitizeRenderedText(t).trim().slice(0, 40))
+        .filter(Boolean)
+        .slice(0, 5)
+    : [];
+
+  const tags = rawTags.length > 0 ? rawTags : ['Tavern Card'];
+  const role = (rawTags[0] || 'Imported Persona').slice(0, 80);
+
+  const alternateGreeting = Array.isArray(cardData.alternate_greetings)
+    ? cardData.alternate_greetings.find(
+        (g): g is string => typeof g === 'string' && g.trim().length > 0
+      )
+    : undefined;
+  const rawGreeting =
+    cleanString(cardData.first_mes, 6000) ||
+    cleanString(cardData.char_greeting, 6000) ||
+    cleanString(alternateGreeting, 6000);
+  const greeting = rawGreeting
+    ? replacePlaceholders(rawGreeting, charName).slice(0, 6000)
+    : `*${charName} looks up as you step closer.* What brings you here?`;
+
+  const bio = buildBioFromCard(cardData, charName);
+  const systemPrompt = buildSystemPromptFromCard(cardData, charName).slice(
+    0,
+    20000
+  );
+  const jsonAvatar =
+    !portraitDataUrl && typeof cardData.avatar === 'string'
+      ? isPortableImageUrl(cardData.avatar)
+      : undefined;
+  const resolvedAvatar = portraitDataUrl ?? jsonAvatar;
+
+  const rawExtensions =
+    cardData.extensions &&
+    typeof cardData.extensions === 'object' &&
+    !Array.isArray(cardData.extensions)
+      ? (cardData.extensions as Record<string, unknown>)
+      : parsedJson.extensions &&
+          typeof parsedJson.extensions === 'object' &&
+          !Array.isArray(parsedJson.extensions)
+        ? (parsedJson.extensions as Record<string, unknown>)
+        : null;
+  const rawAtriumExtension =
+    rawExtensions?.atrium &&
+    typeof rawExtensions.atrium === 'object' &&
+    !Array.isArray(rawExtensions.atrium)
+      ? (rawExtensions.atrium as Record<string, unknown>)
+      : null;
+  const rawBackgroundCandidate =
+    typeof rawAtriumExtension?.backgroundImage === 'string'
+      ? rawAtriumExtension.backgroundImage
+      : typeof rawAtriumExtension?.sceneUrl === 'string'
+        ? rawAtriumExtension.sceneUrl
+        : undefined;
+  const portableStageBackground = isPortableImageUrl(rawBackgroundCandidate);
+  const restoredStageBackground = portableStageBackground
+    ? portableStageBackground
+    : rawBackgroundCandidate
+      ? resolvedAvatar
+      : undefined;
+
+  return {
+    id: `char-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+    name: charName,
+    role,
+    bio,
+    greeting,
+    systemPrompt,
+    imageUrl: resolvedAvatar,
+    ...(restoredStageBackground
+      ? { stageBackground: restoredStageBackground }
+      : {}),
+    tags,
+    icon: 'orbit',
+    tone: 'cobalt',
+  };
+}
+
 export async function parsePngCharacterCard(file: File): Promise<Character> {
   if (file.size > MAX_PNG_FILE_BYTES) {
     throw new Error(
-      'Selected PNG character card exceeds the 15 MB maximum file size.'
+      'Selected character card exceeds the 15 MB maximum file size.'
     );
   }
 
   const buffer = await file.arrayBuffer();
   const bytes = new Uint8Array(buffer);
+  const utf8 = new TextDecoder('utf-8', { fatal: false });
+  const fallbackFileName =
+    sanitizeRenderedText(file.name.replace(/\.(png|json)$/i, ''))
+      .trim()
+      .slice(0, 100) || 'Imported Character';
 
+  // Validate PNG by binary 8-byte signature rather than file.type (iOS Safari / Files app can omit MIME type)
   if (!isPngSignature(bytes)) {
-    throw new Error('Selected file is not a valid PNG image.');
+    const lowerName = (file.name || '').toLowerCase();
+    if (bytes.byteLength <= MAX_METADATA_CHUNK_BYTES) {
+      const jsonText = utf8.decode(bytes);
+      const parsedJson = tryParseCardJson(jsonText);
+      if (parsedJson && hasTavernCardFields(parsedJson)) {
+        return buildCharacterFromCardObject(parsedJson, fallbackFileName);
+      }
+    }
+    if (lowerName.endsWith('.json')) {
+      throw new Error(
+        'Selected JSON file does not contain valid TavernAI V2/V3 character metadata.'
+      );
+    }
+    throw new Error(
+      'Selected file is not a valid PNG character card or character JSON file.'
+    );
   }
 
   const view = new DataView(buffer);
   const latin1 = new TextDecoder('latin1');
-  const utf8 = new TextDecoder('utf-8', { fatal: false });
 
   const candidatesByKeyword: Record<'ccv3' | 'chara', string[]> = {
     ccv3: [],
@@ -432,61 +625,361 @@ export async function parsePngCharacterCard(file: File): Promise<Character> {
     );
   }
 
-  const cardData = (
-    parsedJson.data &&
-    typeof parsedJson.data === 'object' &&
-    !Array.isArray(parsedJson.data)
-      ? parsedJson.data
-      : parsedJson
-  ) as RawTavernCardData;
+  const portraitDataUrl = await readImageFileAsDataUrl(file, 1280, 0.85);
+  return buildCharacterFromCardObject(
+    parsedJson,
+    fallbackFileName,
+    portraitDataUrl
+  );
+}
 
-  const fallbackFileName =
-    sanitizeRenderedText(file.name.replace(/\.png$/i, '')).trim().slice(0, 100) ||
-    'Imported Character';
-  const charName =
-    cleanString(cardData.name, 100) ||
-    cleanString(cardData.nickname, 100) ||
-    fallbackFileName;
+function canvasToPngBytes(canvas: HTMLCanvasElement): Promise<Uint8Array> {
+  return new Promise<Uint8Array>((resolve, reject) => {
+    try {
+      canvas.toBlob(
+        (blob) => {
+          if (!blob) {
+            reject(new Error('Failed to encode character card PNG buffer.'));
+            return;
+          }
+          blob
+            .arrayBuffer()
+            .then((buffer) => resolve(new Uint8Array(buffer)))
+            .catch(() =>
+              reject(new Error('Failed to read generated PNG binary buffer.'))
+            );
+        },
+        'image/png'
+      );
+    } catch (err) {
+      reject(err);
+    }
+  });
+}
 
-  const rawTags = Array.isArray(cardData.tags)
-    ? cardData.tags
-        .filter((t): t is string => typeof t === 'string' && t.trim().length > 0)
-        .map((t) => sanitizeRenderedText(t).trim().slice(0, 40))
+async function renderFallbackPortraitPngBytes(
+  charName: string
+): Promise<Uint8Array> {
+  const canvas = document.createElement('canvas');
+  canvas.width = 512;
+  canvas.height = 768;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) {
+    throw new Error('Canvas 2D context is unavailable for PNG card export.');
+  }
+
+  const bgGradient = ctx.createLinearGradient(0, 0, 512, 768);
+  bgGradient.addColorStop(0, '#120d24');
+  bgGradient.addColorStop(0.55, '#090810');
+  bgGradient.addColorStop(1, '#1a1130');
+  ctx.fillStyle = bgGradient;
+  ctx.fillRect(0, 0, 512, 768);
+
+  const glow = ctx.createRadialGradient(256, 300, 20, 256, 300, 260);
+  glow.addColorStop(0, 'rgba(167, 139, 250, 0.28)');
+  glow.addColorStop(1, 'rgba(167, 139, 250, 0)');
+  ctx.fillStyle = glow;
+  ctx.fillRect(0, 0, 512, 768);
+
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.16)';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(24, 24, 464, 720);
+
+  const initial = (charName.trim().charAt(0) || 'A').toUpperCase();
+  ctx.fillStyle = '#F5F3FF';
+  ctx.font = '700 132px Georgia, serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(initial, 256, 330);
+
+  ctx.fillStyle = 'rgba(226, 218, 255, 0.85)';
+  ctx.font = '600 24px Inter, sans-serif';
+  ctx.fillText(charName.slice(0, 26), 256, 460);
+
+  ctx.fillStyle = 'rgba(167, 139, 250, 0.65)';
+  ctx.font = '500 13px Inter, sans-serif';
+  ctx.fillText('ATRIUM CHARACTER CARD', 256, 696);
+
+  return canvasToPngBytes(canvas);
+}
+
+async function renderAvatarToCleanPngBytes(
+  rawImageUrl: string | undefined,
+  charName: string
+): Promise<Uint8Array> {
+  const safeUrl = sanitizeImageUrl(rawImageUrl);
+  if (!safeUrl) {
+    return renderFallbackPortraitPngBytes(charName);
+  }
+
+  try {
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const image = new Image();
+      if (
+        /^https?:\/\//i.test(safeUrl) &&
+        typeof window !== 'undefined' &&
+        !safeUrl.startsWith(window.location.origin)
+      ) {
+        image.crossOrigin = 'anonymous';
+      }
+      image.onload = () => resolve(image);
+      image.onerror = () =>
+        reject(new Error('Failed to load avatar image for PNG card export.'));
+      image.src = safeUrl;
+    });
+
+    const naturalWidth = img.naturalWidth || img.width || 512;
+    const naturalHeight = img.naturalHeight || img.height || 512;
+    const scale = Math.min(
+      1,
+      MAX_EXPORT_IMAGE_DIMENSION / Math.max(naturalWidth, naturalHeight)
+    );
+    const targetWidth = Math.max(1, Math.round(naturalWidth * scale));
+    const targetHeight = Math.max(1, Math.round(naturalHeight * scale));
+
+    const canvas = document.createElement('canvas');
+    canvas.width = targetWidth;
+    canvas.height = targetHeight;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+      throw new Error('Canvas 2D context is unavailable for PNG card export.');
+    }
+
+    ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
+    return await canvasToPngBytes(canvas);
+  } catch {
+    return renderFallbackPortraitPngBytes(charName);
+  }
+}
+
+async function renderBackgroundToDataUrl(
+  rawImageUrl: string | undefined
+): Promise<string | undefined> {
+  const safeUrl = sanitizeImageUrl(rawImageUrl);
+  if (!safeUrl) return undefined;
+
+  try {
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const image = new Image();
+      if (
+        /^https?:\/\//i.test(safeUrl) &&
+        typeof window !== 'undefined' &&
+        !safeUrl.startsWith(window.location.origin)
+      ) {
+        image.crossOrigin = 'anonymous';
+      }
+      image.onload = () => resolve(image);
+      image.onerror = () =>
+        reject(new Error('Failed to load background image for PNG card export.'));
+      image.src = safeUrl;
+    });
+
+    const naturalWidth = img.naturalWidth || img.width;
+    const naturalHeight = img.naturalHeight || img.height;
+    if (naturalWidth <= 0 || naturalHeight <= 0) {
+      return isPortableImageUrl(safeUrl);
+    }
+
+    const canvas = document.createElement('canvas');
+    canvas.width = naturalWidth;
+    canvas.height = naturalHeight;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+      return isPortableImageUrl(safeUrl);
+    }
+
+    ctx.drawImage(img, 0, 0, naturalWidth, naturalHeight);
+
+    const qualities = [0.9, 0.8, 0.68];
+    for (const quality of qualities) {
+      const webpDataUrl = canvas.toDataURL('image/webp', quality);
+      if (
+        webpDataUrl.startsWith('data:image/webp') &&
+        webpDataUrl.length <= MAX_EMBEDDED_BACKGROUND_DATA_URL_LENGTH
+      ) {
+        return webpDataUrl;
+      }
+
+      const jpegDataUrl = canvas.toDataURL('image/jpeg', quality);
+      if (
+        jpegDataUrl.startsWith('data:image/jpeg') &&
+        jpegDataUrl.length <= MAX_EMBEDDED_BACKGROUND_DATA_URL_LENGTH
+      ) {
+        return jpegDataUrl;
+      }
+    }
+
+    const fallbackWebp = canvas.toDataURL('image/webp', 0.6);
+    if (
+      fallbackWebp.startsWith('data:image/webp') &&
+      fallbackWebp.length <= MAX_EMBEDDED_BACKGROUND_DATA_URL_LENGTH
+    ) {
+      return fallbackWebp;
+    }
+
+    const fallbackJpeg = canvas.toDataURL('image/jpeg', 0.6);
+    return fallbackJpeg.startsWith('data:image/jpeg') &&
+      fallbackJpeg.length <= MAX_EMBEDDED_BACKGROUND_DATA_URL_LENGTH
+      ? fallbackJpeg
+      : isPortableImageUrl(safeUrl);
+  } catch {
+    return isPortableImageUrl(safeUrl);
+  }
+}
+
+function createPngTextChunk(keyword: string, text: string): Uint8Array {
+  const encoder = new TextEncoder();
+  const keywordBytes = encoder.encode(keyword);
+  const textBytes = encoder.encode(text);
+  const chunkDataLength = keywordBytes.length + 1 + textBytes.length;
+
+  const chunk = new Uint8Array(12 + chunkDataLength);
+  const view = new DataView(chunk.buffer);
+  view.setUint32(0, chunkDataLength, false);
+
+  // "tEXt"
+  chunk[4] = 0x74;
+  chunk[5] = 0x45;
+  chunk[6] = 0x58;
+  chunk[7] = 0x74;
+
+  chunk.set(keywordBytes, 8);
+  chunk[8 + keywordBytes.length] = 0x00;
+  chunk.set(textBytes, 8 + keywordBytes.length + 1);
+
+  const crcValue = crc32(chunk.subarray(4, 8 + chunkDataLength));
+  view.setUint32(8 + chunkDataLength, crcValue, false);
+  return chunk;
+}
+
+function injectChunkBeforeIend(
+  pngBytes: Uint8Array,
+  textChunk: Uint8Array
+): Uint8Array {
+  if (!isPngSignature(pngBytes)) {
+    throw new Error('Invalid PNG buffer generated during character export.');
+  }
+
+  const view = new DataView(
+    pngBytes.buffer,
+    pngBytes.byteOffset,
+    pngBytes.byteLength
+  );
+  const latin1 = new TextDecoder('latin1');
+  let offset = 8;
+  let iendOffset = -1;
+
+  while (offset + 12 <= pngBytes.length) {
+    const length = view.getUint32(offset, false);
+    const type = latin1.decode(pngBytes.subarray(offset + 4, offset + 8));
+    if (type === 'IEND') {
+      iendOffset = offset;
+      break;
+    }
+    const nextOffset = offset + 12 + length;
+    if (nextOffset > pngBytes.length) {
+      break;
+    }
+    offset = nextOffset;
+  }
+
+  if (iendOffset === -1) {
+    throw new Error('Generated PNG buffer is missing an IEND chunk.');
+  }
+
+  const output = new Uint8Array(pngBytes.length + textChunk.length);
+  output.set(pngBytes.subarray(0, iendOffset), 0);
+  output.set(textChunk, iendOffset);
+  output.set(pngBytes.subarray(iendOffset), iendOffset + textChunk.length);
+  return output;
+}
+
+export async function exportCharacterAsPngCard(
+  character: Character
+): Promise<string> {
+  const cleanName = sanitizeRenderedText(character.name).trim() || 'Character';
+  const cleanRole = sanitizeRenderedText(character.role || '').trim();
+  const cleanBio = sanitizeRenderedText(character.bio || '').trim();
+  const cleanGreeting = sanitizeRenderedText(character.greeting || '').trim();
+  const cleanSystemPrompt = sanitizeRenderedText(
+    character.systemPrompt || ''
+  ).trim();
+  const cleanTags = Array.isArray(character.tags)
+    ? character.tags
+        .map((tag) => sanitizeRenderedText(tag).trim())
         .filter(Boolean)
-        .slice(0, 5)
+        .slice(0, 12)
     : [];
 
-  const tags = rawTags.length > 0 ? rawTags : ['Tavern Card'];
-  const role = (rawTags[0] || 'Imported Persona').slice(0, 80);
-
-  const alternateGreeting = Array.isArray(cardData.alternate_greetings)
-    ? cardData.alternate_greetings.find(
-        (g): g is string => typeof g === 'string' && g.trim().length > 0
-      )
-    : undefined;
-  const rawGreeting =
-    cleanString(cardData.first_mes, 6000) || cleanString(alternateGreeting, 6000);
-  const greeting = rawGreeting
-    ? replacePlaceholders(rawGreeting, charName).slice(0, 6000)
-    : `*${charName} looks up as you step closer.* What brings you here?`;
-
-  const bio = buildBioFromCard(cardData, charName);
-  const systemPrompt = buildSystemPromptFromCard(cardData, charName).slice(
-    0,
-    20000
+  const safeAvatarUrl = sanitizeImageUrl(character.imageUrl);
+  const rawStageBg = sanitizeImageUrl(
+    character.stageBackground || character.wallpaperUrl
   );
-  const portraitDataUrl = await readImageFileAsDataUrl(file, 1280, 0.85);
+  const embeddedBackgroundImage =
+    rawStageBg && rawStageBg !== safeAvatarUrl
+      ? await renderBackgroundToDataUrl(rawStageBg)
+      : undefined;
+  const separateBackgroundImage =
+    embeddedBackgroundImage && embeddedBackgroundImage !== safeAvatarUrl
+      ? embeddedBackgroundImage
+      : undefined;
 
-  return {
-    id: `char-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
-    name: charName,
-    role,
-    bio,
-    greeting,
-    systemPrompt,
-    imageUrl: portraitDataUrl,
-    tags,
-    icon: 'orbit',
-    tone: 'cobalt',
+  const cleanPngBytes = await renderAvatarToCleanPngBytes(
+    safeAvatarUrl,
+    cleanName
+  );
+
+  const v2Metadata = {
+    spec: 'chara_card_v2',
+    spec_version: '2.0',
+    data: {
+      name: cleanName,
+      description: cleanBio || cleanRole,
+      personality: '',
+      scenario: cleanRole,
+      first_mes: cleanGreeting,
+      mes_example: '',
+      creator_notes: cleanBio,
+      system_prompt: cleanSystemPrompt,
+      tags: cleanTags,
+      alternate_greetings: [] as string[],
+      character_book: { entries: [] as unknown[] },
+      ...(separateBackgroundImage
+        ? {
+            extensions: {
+              atrium: {
+                backgroundImage: separateBackgroundImage,
+              },
+            },
+          }
+        : {}),
+    },
   };
+
+  const base64Payload = encodeUtf8Base64(JSON.stringify(v2Metadata));
+  const textChunk = createPngTextChunk('chara', base64Payload);
+  const finalPngBytes = injectChunkBeforeIend(cleanPngBytes, textChunk);
+
+  const sanitizedFileBase =
+    cleanName
+      .toLowerCase()
+      .replace(/[^a-z0-9._-]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 64) || 'character-card';
+  const fileName = `${sanitizedFileBase}.png`;
+
+  const blob = new Blob([finalPngBytes.buffer as ArrayBuffer], {
+    type: 'image/png',
+  });
+  const downloadUrl = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = downloadUrl;
+  anchor.download = fileName;
+  anchor.rel = 'noopener';
+  document.body.appendChild(anchor);
+  anchor.click();
+  document.body.removeChild(anchor);
+  window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
+
+  return fileName;
 }

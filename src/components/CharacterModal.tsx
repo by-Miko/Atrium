@@ -1,5 +1,6 @@
 import {
   CheckCircle2,
+  Download,
   FileImage,
   ImagePlus,
   Trash2,
@@ -18,7 +19,10 @@ import {
   readImageFileAsDataUrl,
   sanitizeImageUrl,
 } from '../utils/imageUpload';
-import { parsePngCharacterCard } from '../utils/pngCharacterCard';
+import {
+  exportCharacterAsPngCard,
+  parsePngCharacterCard,
+} from '../utils/pngCharacterCard';
 import { sanitizeRenderedText } from '../utils/sanitize';
 import {
   CHARACTER_ICON_OPTIONS,
@@ -57,11 +61,13 @@ export function CharacterModal({
   const [tone, setTone] = useState<CharacterTone>('cobalt');
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [importSuccess, setImportSuccess] = useState<string | null>(null);
+  const [isExportingCard, setIsExportingCard] = useState(false);
 
   useEffect(() => {
     if (!isOpen) return;
     setUploadError(null);
     setImportSuccess(null);
+    setIsExportingCard(false);
     if (editingCharacter) {
       setName(editingCharacter.name);
       setRole(editingCharacter.role);
@@ -152,7 +158,10 @@ export function CharacterModal({
       setRole(imported.role);
       setBio(imported.bio);
       setTagsInput(imported.tags.join(', '));
-      setImageUrl(imported.imageUrl ?? '');
+      if (imported.imageUrl) {
+        setImageUrl(imported.imageUrl);
+      }
+      setStageBackground(imported.stageBackground ?? '');
       setGreeting(imported.greeting);
       setSystemPrompt(imported.systemPrompt);
       setImportSuccess(t.importCharacterCardSuccess(imported.name));
@@ -160,8 +169,54 @@ export function CharacterModal({
       setUploadError(
         err instanceof Error
           ? err.message
-          : 'Failed to read PNG character card.'
+          : 'Failed to read character card file.'
       );
+    }
+  };
+
+  const handleExportPngCard = async () => {
+    if (isExportingCard) return;
+    const safeName = sanitizeRenderedText(name).trim() || 'Character';
+    const trimmedImageUrl = imageUrl.trim();
+    const safeImageUrl = trimmedImageUrl
+      ? sanitizeImageUrl(trimmedImageUrl)
+      : undefined;
+    const trimmedStageBg = stageBackground.trim();
+    const safeStageBg = trimmedStageBg
+      ? sanitizeImageUrl(trimmedStageBg)
+      : undefined;
+    const tags = tagsInput
+      .split(',')
+      .map((tag) => sanitizeRenderedText(tag).trim())
+      .filter(Boolean)
+      .slice(0, 12);
+
+    try {
+      setIsExportingCard(true);
+      setUploadError(null);
+      setImportSuccess(null);
+      const fileName = await exportCharacterAsPngCard({
+        id: editingCharacter?.id ?? 'char-export',
+        name: safeName,
+        role: sanitizeRenderedText(role).trim() || 'Roleplay Persona',
+        bio: sanitizeRenderedText(bio).trim(),
+        greeting: sanitizeRenderedText(greeting).trim(),
+        systemPrompt: sanitizeRenderedText(systemPrompt).trim(),
+        imageUrl: safeImageUrl,
+        stageBackground: safeStageBg,
+        tags,
+        icon,
+        tone,
+      });
+      setImportSuccess(t.exportCharacterCardSuccess(fileName));
+    } catch (err) {
+      setUploadError(
+        err instanceof Error
+          ? err.message
+          : 'Failed to export PNG character card.'
+      );
+    } finally {
+      setIsExportingCard(false);
     }
   };
 
@@ -274,26 +329,42 @@ export function CharacterModal({
         </div>
 
         <form onSubmit={handleSubmit} className="mt-6 space-y-5">
-          {/* Standard PNG Character Card Importer */}
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[var(--theme-border)] bg-black/35 px-4 py-3">
-            <div className="min-w-0 flex-1">
-              <p className="text-xs font-medium text-white">
-                TavernAI / Character Card V2 (.png)
-              </p>
-              <p className="mt-0.5 text-[11px] text-[var(--theme-muted)]">
-                Reads embedded Base64 &quot;chara&quot; metadata &amp; portrait automatically
-              </p>
+          {/* Standard PNG / JSON Character Card Importer & V2 PNG Exporter */}
+          <div className="rounded-2xl border border-[var(--theme-border)] bg-black/35 px-4 py-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-medium text-white">
+                  TavernAI / Character Card V2 · V3 (.png / .json)
+                </p>
+                <p className="mt-0.5 text-[11px] text-[var(--theme-muted)]">
+                  {t.characterCardSubtitle}
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 shrink-0">
+                <label className="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-full border border-[var(--theme-border)] bg-white/10 px-4 text-xs font-semibold text-white transition-colors hover:bg-white/15 whitespace-nowrap shrink-0">
+                  <FileImage className="h-3.5 w-3.5 text-[var(--theme-accent)]" />
+                  <span>{t.importCharacterCardButton}</span>
+                  <input
+                    type="file"
+                    accept=".png,.json,image/png,application/json"
+                    onChange={handleImportPngCard}
+                    className="sr-only"
+                  />
+                </label>
+                <button
+                  type="button"
+                  onClick={() => void handleExportPngCard()}
+                  disabled={isExportingCard || !name.trim()}
+                  className="inline-flex h-9 items-center gap-1.5 rounded-full border border-[var(--theme-border)] bg-white/10 px-4 text-xs font-semibold text-white transition-colors hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-45 whitespace-nowrap shrink-0"
+                >
+                  <Download className="h-3.5 w-3.5 text-[var(--theme-accent)]" />
+                  <span>{t.exportCharacterCardButton}</span>
+                </button>
+              </div>
             </div>
-            <label className="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-full border border-[var(--theme-border)] bg-white/10 px-4 text-xs font-semibold text-white transition-colors hover:bg-white/15 whitespace-nowrap shrink-0">
-              <FileImage className="h-3.5 w-3.5 text-[var(--theme-accent)]" />
-              <span>{t.importCharacterCardButton}</span>
-              <input
-                type="file"
-                accept=".png,image/png"
-                onChange={handleImportPngCard}
-                className="sr-only"
-              />
-            </label>
+            <p className="mt-2.5 border-t border-white/10 pt-2 text-[11px] leading-relaxed text-[var(--theme-muted)]">
+              {t.iosCardImportTip}
+            </p>
           </div>
 
           {importSuccess ? (

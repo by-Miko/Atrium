@@ -12,9 +12,23 @@ import {
   X,
 } from 'lucide-react';
 import { motion } from 'motion/react';
-import { useMemo, useRef, useState, type ChangeEvent } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type PointerEvent as ReactPointerEvent,
+} from 'react';
 import type { UIStrings } from '../i18n/translations';
-import type { ApiProvider, Character, UserPersona } from '../types/chat';
+import type {
+  ApiProvider,
+  Character,
+  LobbyBackdropMode,
+  UserPersona,
+} from '../types/chat';
 import { sanitizeImageUrl } from '../utils/imageUpload';
 import { parsePngCharacterCard } from '../utils/pngCharacterCard';
 import { sanitizeRenderedText } from '../utils/sanitize';
@@ -36,11 +50,13 @@ interface AtriumLobbyProps {
   onCreateCharacter: () => void;
   onImportCharacter: (character: Character) => void;
   onEditCharacter: (character: Character) => void;
+  onReorderCharacters: (orderedIds: string[]) => void;
   onOpenUserPersona: () => void;
   onOpenSettings: () => void;
   onOpenOllamaSetup: () => void;
   mobileLinkActive?: boolean;
   onOpenMobileLink?: () => void;
+  backdropMode?: LobbyBackdropMode;
   onExit: () => void;
 }
 
@@ -50,10 +66,16 @@ interface LobbyCardProps {
   index: number;
   introDone: boolean;
   isRecent: boolean;
+  isDragging: boolean;
+  isSettling: boolean;
+  isAnyDragging: boolean;
   messageCount: number;
   onEnterScene: () => void;
   onOpenProfile: () => void;
   onEdit: () => void;
+  onPointerDown: (e: ReactPointerEvent<HTMLDivElement>) => void;
+  registerSlotRef: (el: HTMLDivElement | null) => void;
+  registerVisualRef: (el: HTMLDivElement | null) => void;
 }
 
 function LobbyCharacterCard({
@@ -62,10 +84,16 @@ function LobbyCharacterCard({
   index,
   introDone,
   isRecent,
+  isDragging,
+  isSettling,
+  isAnyDragging,
   messageCount,
   onEnterScene,
   onOpenProfile,
   onEdit,
+  onPointerDown,
+  registerSlotRef,
+  registerVisualRef,
 }: LobbyCardProps) {
   const [imgFailed, setImgFailed] = useState(false);
   const [hasEntered, setHasEntered] = useState(false);
@@ -79,154 +107,213 @@ function LobbyCharacterCard({
   const showImage = Boolean(safeImageUrl) && !imgFailed;
 
   return (
-    <motion.div
-      initial={{
-        opacity: 0,
-        transform: 'translate3d(0, 18px, 0) scale3d(0.97, 0.97, 1)',
-      }}
-      animate={
-        introDone
-          ? {
-              opacity: 1,
-              transform: 'translate3d(0, 0, 0) scale3d(1, 1, 1)',
-            }
-          : {
-              opacity: 0,
-              transform: 'translate3d(0, 18px, 0) scale3d(0.97, 0.97, 1)',
-            }
-      }
-      whileHover={{
-        transform: 'translate3d(0, -5px, 0) scale3d(1, 1, 1)',
-        transition: { duration: 0.2, delay: 0, ease: [0.22, 1, 0.36, 1] },
-      }}
-      onAnimationComplete={() => {
-        if (introDone && !hasEntered) {
-          setHasEntered(true);
+    <div
+      ref={registerSlotRef}
+      onPointerDown={onPointerDown}
+      onContextMenu={(e) => {
+        if (isAnyDragging || isSettling) {
+          e.preventDefault();
         }
       }}
-      transition={{
-        duration: 0.45,
-        delay: introDone && !hasEntered ? Math.min(index, 16) * 0.045 : 0,
-        ease: [0.22, 1, 0.36, 1],
-      }}
-      style={{
-        willChange: introDone && !hasEntered ? 'transform, opacity' : 'auto',
-      }}
-      className={`group mobile-card-blur relative aspect-[3/4] overflow-hidden rounded-[20px] border bg-[var(--theme-glass)] backdrop-blur-md transition-all duration-700 ease-in-out sm:aspect-[2/3] sm:rounded-[26px] ${
-        isRecent
-          ? 'border-white/20 hover:border-amber-300/75 hover:shadow-[0_0_0_1px_rgba(253,230,138,0.35),0_20px_50px_rgba(245,158,11,0.16),0_18px_40px_rgba(0,0,0,0.65)]'
-          : 'border-[rgba(255,255,255,0.12)] hover:border-amber-300/70 hover:shadow-[0_0_0_1px_rgba(253,230,138,0.32),0_20px_50px_rgba(245,158,11,0.14),0_18px_40px_rgba(0,0,0,0.6)]'
+      style={{ WebkitTouchCallout: 'none' }}
+      className={`relative aspect-[3/4] select-none sm:aspect-[2/3] ${
+        isDragging || isSettling ? 'z-40' : ''
       }`}
     >
-      {showImage ? (
-        <img
-          src={safeImageUrl}
-          alt={safeName}
-          decoding="async"
-          referrerPolicy="no-referrer"
-          onError={() => setImgFailed(true)}
-          className="h-full w-full object-cover object-top transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:scale-[1.05]"
+      {/* Subtle target grid slot placeholder ghost while this card is lifted */}
+      {isDragging ? (
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 rounded-[20px] border-2 border-dashed border-amber-200/35 bg-violet-950/20 backdrop-blur-sm sm:rounded-[26px]"
         />
-      ) : (
-        <div className="flex h-full w-full flex-col items-center justify-center bg-[radial-gradient(circle_at_30%_20%,var(--theme-accent-soft),transparent_65%),linear-gradient(160deg,#1B1A26,#0B0B11)] p-4">
-          <CharacterIcon
-            icon={character.icon}
-            tone={character.tone}
-            size="lg"
-          />
-        </div>
-      )}
+      ) : null}
 
       <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent transition-opacity duration-300 group-hover:via-black/30 sm:from-black/95 sm:via-black/40 sm:to-black/15"
-      />
-
-      {/* Crisp 1px top-left Liquid Glass specular edge highlight + subtle warm-gold rim glow on hover */}
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-0 rounded-[20px] p-[1px] opacity-80 transition-opacity duration-300 group-hover:opacity-0 sm:rounded-[26px]"
-        style={{
-          background:
-            'linear-gradient(135deg, rgba(255,255,255,0.32) 0%, rgba(255,255,255,0.08) 38%, rgba(255,255,255,0) 70%)',
-          mask: 'linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)',
-          maskComposite: 'exclude',
-          WebkitMask:
-            'linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)',
-          WebkitMaskComposite: 'xor',
-        }}
-      />
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-0 rounded-[20px] ring-1 ring-inset ring-amber-200/0 transition-all duration-300 group-hover:ring-amber-200/35 sm:rounded-[26px]"
-      />
-
-      <div className="pointer-events-none absolute inset-x-3 top-3 z-10 flex items-center justify-between gap-1.5 sm:inset-x-4 sm:top-4 sm:gap-2">
-        <div className="min-w-0 text-[10px] font-medium text-white/80 drop-shadow sm:text-[11px]">
-          {messageCount > 0 ? (
-            <span className="tabular-nums text-white/80">
-              {messageCount} {messageCount === 1 ? t.msgSingular : t.msgPlural}
-            </span>
-          ) : null}
-        </div>
-
-        <div className="pointer-events-auto flex items-center gap-1.5">
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onOpenProfile();
-            }}
-            aria-label={`${t.viewCharacterProfile}: ${safeName}`}
-            title={`${t.viewCharacterProfile}: ${safeName}`}
-            className="inline-flex h-8 w-8 touch-manipulation items-center justify-center rounded-full border border-white/15 bg-black/50 text-white/80 opacity-85 backdrop-blur-md transition-all hover:border-amber-300/50 hover:bg-black/75 hover:text-white focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-[var(--theme-accent)] sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"
-          >
-            <Eye className="h-3.5 w-3.5" />
-          </button>
-
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onEdit();
-            }}
-            aria-label={`${t.editCharacterTitle}: ${safeName}`}
-            title={`${t.editCharacterTitle}: ${safeName}`}
-            className="inline-flex h-8 w-8 touch-manipulation items-center justify-center rounded-full border border-white/15 bg-black/50 text-white/80 opacity-85 backdrop-blur-md transition-all hover:border-amber-300/50 hover:bg-black/75 hover:text-white focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-[var(--theme-accent)] sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"
-          >
-            <Pencil className="h-3.5 w-3.5" />
-          </button>
-        </div>
-      </div>
-
-      <button
-        type="button"
-        onClick={onEnterScene}
-        className="absolute inset-0 flex touch-manipulation flex-col justify-end p-3.5 text-left focus-visible:outline-2 focus-visible:outline-inset focus-visible:outline-[var(--theme-accent)] sm:p-5"
+        ref={registerVisualRef}
+        className={`relative h-full w-full ${
+          isDragging || isSettling ? 'will-change-transform' : ''
+        }`}
       >
-        {safeTags.length > 0 ? (
-          <p className="mb-1.5 hidden truncate text-[11px] font-medium text-[var(--theme-accent)] transition-colors group-hover:text-amber-200 sm:block">
-            {safeTags.join(' · ')}
-          </p>
-        ) : null}
+        <motion.div
+          initial={{
+            opacity: 0,
+            y: 18,
+            scale: 0.97,
+          }}
+          animate={
+            introDone
+              ? {
+                  opacity: 1,
+                  y: 0,
+                  scale: 1,
+                }
+              : {
+                  opacity: 0,
+                  y: 18,
+                  scale: 0.97,
+                }
+          }
+          whileHover={
+            isAnyDragging || isSettling
+              ? undefined
+              : {
+                  y: -5,
+                  transition: {
+                    duration: 0.2,
+                    delay: 0,
+                    ease: [0.22, 1, 0.36, 1],
+                  },
+                }
+          }
+          onAnimationComplete={() => {
+            if (introDone && !hasEntered) {
+              setHasEntered(true);
+            }
+          }}
+          transition={{
+            duration: 0.45,
+            delay: introDone && !hasEntered ? Math.min(index, 16) * 0.045 : 0,
+            ease: [0.22, 1, 0.36, 1],
+          }}
+          style={{
+            willChange:
+              introDone && !hasEntered ? 'transform, opacity' : 'auto',
+          }}
+          className={`group mobile-card-blur relative h-full w-full overflow-hidden rounded-[20px] border bg-[var(--theme-glass)] backdrop-blur-md transition-shadow duration-200 ease-out sm:rounded-[26px] ${
+            isDragging
+              ? 'cursor-grabbing border-amber-200/50 shadow-[0_24px_48px_rgba(0,0,0,0.65),0_0_0_1.5px_rgba(229,204,160,0.45)]'
+              : isSettling
+                ? 'border-amber-200/35 shadow-[0_18px_40px_rgba(0,0,0,0.55)]'
+                : isRecent
+                  ? 'border-white/20 hover:border-amber-300/75 hover:shadow-[0_0_0_1px_rgba(253,230,138,0.35),0_20px_50px_rgba(245,158,11,0.16),0_18px_40px_rgba(0,0,0,0.65)]'
+                  : 'border-[rgba(255,255,255,0.12)] hover:border-amber-300/70 hover:shadow-[0_0_0_1px_rgba(253,230,138,0.32),0_20px_50px_rgba(245,158,11,0.14),0_18px_40px_rgba(0,0,0,0.6)]'
+          }`}
+        >
+          {showImage ? (
+            <img
+              src={safeImageUrl}
+              alt={safeName}
+              decoding="async"
+              draggable={false}
+              referrerPolicy="no-referrer"
+              onError={() => setImgFailed(true)}
+              className="h-full w-full select-none object-cover object-top transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:scale-[1.05]"
+            />
+          ) : (
+            <div className="flex h-full w-full flex-col items-center justify-center bg-[radial-gradient(circle_at_30%_20%,var(--theme-accent-soft),transparent_65%),linear-gradient(160deg,#1B1A26,#0B0B11)] p-4">
+              <CharacterIcon
+                icon={character.icon}
+                tone={character.tone}
+                size="lg"
+              />
+            </div>
+          )}
 
-        <h2 className="truncate font-display text-base font-semibold leading-tight text-white sm:text-lg">
-          {safeName}
-        </h2>
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent transition-opacity duration-300 group-hover:via-black/30 sm:from-black/95 sm:via-black/40 sm:to-black/15"
+          />
 
-        <p className="mt-0.5 line-clamp-1 text-xs font-medium text-white/75">
-          {safeRole}
-        </p>
+          {/* Crisp 1px top-left Liquid Glass specular edge highlight + subtle warm-gold rim glow on hover */}
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 rounded-[20px] p-[1px] opacity-80 transition-opacity duration-300 group-hover:opacity-0 sm:rounded-[26px]"
+            style={{
+              background:
+                'linear-gradient(135deg, rgba(255,255,255,0.32) 0%, rgba(255,255,255,0.08) 38%, rgba(255,255,255,0) 70%)',
+              mask: 'linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)',
+              maskComposite: 'exclude',
+              WebkitMask:
+                'linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)',
+              WebkitMaskComposite: 'xor',
+            }}
+          />
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 rounded-[20px] ring-1 ring-inset ring-amber-200/0 transition-all duration-300 group-hover:ring-amber-200/35 sm:rounded-[26px]"
+          />
 
-        <p className="mt-2 hidden text-[13px] leading-snug text-white/80 sm:line-clamp-2 sm:block">
-          {safeBio}
-        </p>
-      </button>
-    </motion.div>
+          <div className="pointer-events-none absolute inset-x-3 top-3 z-10 flex items-center justify-between gap-1.5 sm:inset-x-4 sm:top-4 sm:gap-2">
+            <div className="min-w-0 text-[10px] font-medium text-white/80 drop-shadow sm:text-[11px]">
+              {messageCount > 0 ? (
+                <span className="tabular-nums text-white/80">
+                  {messageCount}{' '}
+                  {messageCount === 1 ? t.msgSingular : t.msgPlural}
+                </span>
+              ) : null}
+            </div>
+
+            <div className="pointer-events-auto flex items-center gap-1.5">
+              <button
+                type="button"
+                data-card-action="true"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onOpenProfile();
+                }}
+                aria-label={`${t.viewCharacterProfile}: ${safeName}`}
+                title={`${t.viewCharacterProfile}: ${safeName}`}
+                className="inline-flex h-8 w-8 touch-manipulation items-center justify-center rounded-full border border-white/15 bg-black/50 text-white/80 opacity-85 backdrop-blur-md transition-all hover:border-amber-300/50 hover:bg-black/75 hover:text-white focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-[var(--theme-accent)] sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"
+              >
+                <Eye className="h-3.5 w-3.5" />
+              </button>
+
+              <button
+                type="button"
+                data-card-action="true"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onEdit();
+                }}
+                aria-label={`${t.editCharacterTitle}: ${safeName}`}
+                title={`${t.editCharacterTitle}: ${safeName}`}
+                className="inline-flex h-8 w-8 touch-manipulation items-center justify-center rounded-full border border-white/15 bg-black/50 text-white/80 opacity-85 backdrop-blur-md transition-all hover:border-amber-300/50 hover:bg-black/75 hover:text-white focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-[var(--theme-accent)] sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"
+              >
+                <Pencil className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={onEnterScene}
+            className={`absolute inset-0 flex touch-manipulation flex-col justify-end p-3.5 text-left focus-visible:outline-2 focus-visible:outline-inset focus-visible:outline-[var(--theme-accent)] sm:p-5 ${
+              isDragging ? 'cursor-grabbing' : ''
+            }`}
+          >
+            {safeTags.length > 0 ? (
+              <p className="mb-1.5 hidden truncate text-[11px] font-medium text-[var(--theme-accent)] transition-colors group-hover:text-amber-200 sm:block">
+                {safeTags.join(' · ')}
+              </p>
+            ) : null}
+
+            <h2 className="truncate font-display text-base font-semibold leading-tight text-white sm:text-lg">
+              {safeName}
+            </h2>
+
+            <p className="mt-0.5 line-clamp-1 text-xs font-medium text-white/75">
+              {safeRole}
+            </p>
+
+            <p className="mt-2 hidden text-[13px] leading-snug text-white/80 sm:line-clamp-2 sm:block">
+              {safeBio}
+            </p>
+          </button>
+        </motion.div>
+      </div>
+    </div>
   );
 }
 
 const ALL_TAG_KEY = '__ALL__';
+const DRAG_HOLD_DELAY_MS = 150;
+const DRAG_MOVE_CANCEL_PX = 8;
+const SWAP_MIDPOINT_DEADZONE_PX = 28;
+const FLIP_NEIGHBOR_DURATION_MS = 700;
+const DRAG_SETTLE_DURATION_MS = 480;
+const SILKY_EASING = 'cubic-bezier(0.16, 1, 0.3, 1)';
+const EDGE_AUTOSCROLL_ZONE_PX = 85;
+const EDGE_AUTOSCROLL_SPEED_PX = 5;
 
 export function AtriumLobby({
   t,
@@ -243,17 +330,455 @@ export function AtriumLobby({
   onCreateCharacter,
   onImportCharacter,
   onEditCharacter,
+  onReorderCharacters,
   onOpenUserPersona,
   onOpenSettings,
   onOpenOllamaSetup,
   mobileLinkActive = false,
   onOpenMobileLink,
+  backdropMode = 'orbital-clouds',
   onExit,
 }: AtriumLobbyProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTag, setActiveTag] = useState<string>(ALL_TAG_KEY);
   const [pngImportError, setPngImportError] = useState<string | null>(null);
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [settlingId, setSettlingId] = useState<string | null>(null);
+  const [previewOrderIds, setPreviewOrderIds] = useState<string[] | null>(null);
   const pngInputRef = useRef<HTMLInputElement | null>(null);
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const gridRef = useRef<HTMLDivElement | null>(null);
+  const slotRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  const visualRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  const prevRectsRef = useRef<Map<string, DOMRect>>(new Map());
+  const pendingFlipRef = useRef(false);
+  const savedScrollTopRef = useRef<number | null>(null);
+  const flipCleanupTimersRef = useRef<Map<string, number>>(new Map());
+  const flipRafIdsRef = useRef<Map<string, number>>(new Map());
+  const settleTimerRef = useRef<number | null>(null);
+  const settleRafRef = useRef<number | null>(null);
+  const autoScrollRafRef = useRef<number | null>(null);
+  const dragOffsetRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const dragLastPointerRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const previewOrderRef = useRef<string[] | null>(null);
+  previewOrderRef.current = previewOrderIds;
+  const draggingIdRef = useRef<string | null>(null);
+  draggingIdRef.current = draggingId;
+  const charactersRef = useRef<Character[]>(characters);
+  charactersRef.current = characters;
+  const suppressClickUntilRef = useRef<number>(0);
+  const lastSwapAtRef = useRef<number>(0);
+  const cleanupListenersRef = useRef<(() => void) | null>(null);
+  const pressRef = useRef<{
+    pointerId: number;
+    cardId: string;
+    startX: number;
+    startY: number;
+    isDragging: boolean;
+    timerId: number | null;
+  } | null>(null);
+
+  const captureSlotRects = useCallback(() => {
+    if (scrollContainerRef.current) {
+      savedScrollTopRef.current = scrollContainerRef.current.scrollTop;
+    }
+    const snapshot = new Map<string, DOMRect>();
+    for (const [id, el] of slotRefs.current.entries()) {
+      snapshot.set(id, el.getBoundingClientRect());
+    }
+    prevRectsRef.current = snapshot;
+    pendingFlipRef.current = true;
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (
+        pressRef.current?.timerId !== null &&
+        pressRef.current?.timerId !== undefined
+      ) {
+        window.clearTimeout(pressRef.current.timerId);
+      }
+      if (settleTimerRef.current !== null) {
+        window.clearTimeout(settleTimerRef.current);
+      }
+      if (settleRafRef.current !== null) {
+        cancelAnimationFrame(settleRafRef.current);
+      }
+      if (autoScrollRafRef.current !== null) {
+        cancelAnimationFrame(autoScrollRafRef.current);
+      }
+      for (const rafId of flipRafIdsRef.current.values()) {
+        cancelAnimationFrame(rafId);
+      }
+      flipRafIdsRef.current.clear();
+      for (const timerId of flipCleanupTimersRef.current.values()) {
+        window.clearTimeout(timerId);
+      }
+      flipCleanupTimersRef.current.clear();
+      cleanupListenersRef.current?.();
+    };
+  }, []);
+
+  const handleCardPointerDown = useCallback(
+    (e: ReactPointerEvent<HTMLDivElement>, cardId: string) => {
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      if (charactersRef.current.length <= 1) return;
+      const target = e.target as HTMLElement | null;
+      if (target?.closest('button[data-card-action="true"]')) {
+        return;
+      }
+
+      if (
+        pressRef.current?.timerId !== null &&
+        pressRef.current?.timerId !== undefined
+      ) {
+        window.clearTimeout(pressRef.current.timerId);
+      }
+      cleanupListenersRef.current?.();
+
+      if (settleTimerRef.current !== null) {
+        window.clearTimeout(settleTimerRef.current);
+        settleTimerRef.current = null;
+      }
+      if (settleRafRef.current !== null) {
+        cancelAnimationFrame(settleRafRef.current);
+        settleRafRef.current = null;
+      }
+      setSettlingId(null);
+
+      const pointerId = e.pointerId;
+      const startX = e.clientX;
+      const startY = e.clientY;
+
+      const state = {
+        pointerId,
+        cardId,
+        startX,
+        startY,
+        isDragging: false,
+        timerId: null as number | null,
+      };
+      pressRef.current = state;
+
+      const applyVisualTransform = (
+        id: string,
+        dx: number,
+        dy: number,
+        scale: number,
+        transitionCss: string
+      ) => {
+        const visualEl = visualRefs.current.get(id);
+        if (!visualEl) return;
+        visualEl.style.transition = transitionCss;
+        visualEl.style.transform = `translate3d(${dx}px, ${dy}px, 0) scale(${scale})`;
+      };
+
+      const stopAutoScroll = () => {
+        if (autoScrollRafRef.current !== null) {
+          cancelAnimationFrame(autoScrollRafRef.current);
+          autoScrollRafRef.current = null;
+        }
+      };
+
+      const evaluateHoverSwap = (clientX: number, clientY: number) => {
+        const now = Date.now();
+        if (now - lastSwapAtRef.current < 120) {
+          return;
+        }
+
+        const gridEl = gridRef.current;
+        if (!gridEl) return;
+        const gridRect = gridEl.getBoundingClientRect();
+        const relX = clientX - gridRect.left;
+        const relY = clientY - gridRect.top;
+
+        let hoveredId: string | null = null;
+        for (const [candidateId, slotEl] of slotRefs.current.entries()) {
+          if (candidateId === state.cardId) continue;
+          const halfW = slotEl.offsetWidth / 2;
+          const halfH = slotEl.offsetHeight / 2;
+          const centerX = slotEl.offsetLeft + halfW;
+          const centerY = slotEl.offsetTop + halfH;
+          const activeHalfW = Math.max(12, halfW - SWAP_MIDPOINT_DEADZONE_PX);
+          const activeHalfH = Math.max(12, halfH - SWAP_MIDPOINT_DEADZONE_PX);
+          if (
+            Math.abs(relX - centerX) <= activeHalfW &&
+            Math.abs(relY - centerY) <= activeHalfH
+          ) {
+            hoveredId = candidateId;
+            break;
+          }
+        }
+
+        if (!hoveredId) return;
+
+        const base =
+          previewOrderRef.current ?? charactersRef.current.map((c) => c.id);
+        const fromIdx = base.indexOf(state.cardId);
+        const toIdx = base.indexOf(hoveredId);
+        if (fromIdx === -1 || toIdx === -1 || fromIdx === toIdx) {
+          return;
+        }
+
+        lastSwapAtRef.current = now;
+        captureSlotRects();
+
+        const next = [...base];
+        const [moved] = next.splice(fromIdx, 1);
+        next.splice(toIdx, 0, moved);
+        previewOrderRef.current = next;
+        setPreviewOrderIds(next);
+      };
+
+      const getEdgeAutoScrollVelocity = (clientY: number): number => {
+        const scrollEl = scrollContainerRef.current;
+        if (!scrollEl) return 0;
+        const rect = scrollEl.getBoundingClientRect();
+        const topDist = clientY - rect.top;
+        const bottomDist = rect.bottom - clientY;
+
+        if (topDist < EDGE_AUTOSCROLL_ZONE_PX) {
+          const intensity = Math.min(
+            1,
+            Math.max(
+              0,
+              (EDGE_AUTOSCROLL_ZONE_PX - topDist) / EDGE_AUTOSCROLL_ZONE_PX
+            )
+          );
+          return -EDGE_AUTOSCROLL_SPEED_PX * intensity;
+        }
+        if (bottomDist < EDGE_AUTOSCROLL_ZONE_PX) {
+          const intensity = Math.min(
+            1,
+            Math.max(
+              0,
+              (EDGE_AUTOSCROLL_ZONE_PX - bottomDist) / EDGE_AUTOSCROLL_ZONE_PX
+            )
+          );
+          return EDGE_AUTOSCROLL_SPEED_PX * intensity;
+        }
+        return 0;
+      };
+
+      const ensureAutoScrollLoop = () => {
+        if (autoScrollRafRef.current !== null) return;
+        let lastTime = performance.now() - 16.67;
+        let carry = 0;
+
+        const tick = (now: number) => {
+          if (
+            pressRef.current !== state ||
+            !state.isDragging ||
+            draggingIdRef.current !== state.cardId
+          ) {
+            autoScrollRafRef.current = null;
+            return;
+          }
+
+          const scrollEl = scrollContainerRef.current;
+          const pointer = dragLastPointerRef.current;
+          const velocity = getEdgeAutoScrollVelocity(pointer.y);
+          if (!scrollEl || Math.abs(velocity) < 0.05) {
+            autoScrollRafRef.current = null;
+            return;
+          }
+
+          const dt = Math.max(4, now - lastTime);
+          lastTime = now;
+          const frameScale = Math.min(2, Math.max(0.35, dt / 16.67));
+          carry += velocity * frameScale;
+
+          const prevScrollTop = scrollEl.scrollTop;
+          scrollEl.scrollTop = prevScrollTop + carry;
+          const actualScrollDelta = scrollEl.scrollTop - prevScrollTop;
+
+          if (actualScrollDelta !== 0) {
+            carry -= actualScrollDelta;
+            dragOffsetRef.current = {
+              x: dragOffsetRef.current.x,
+              y: dragOffsetRef.current.y + actualScrollDelta,
+            };
+            applyVisualTransform(
+              state.cardId,
+              dragOffsetRef.current.x,
+              dragOffsetRef.current.y,
+              1.035,
+              'none'
+            );
+            evaluateHoverSwap(pointer.x, pointer.y);
+          } else if (Math.abs(carry) > 2) {
+            // Reached top or bottom scroll limit
+            autoScrollRafRef.current = null;
+            return;
+          }
+
+          autoScrollRafRef.current = requestAnimationFrame(tick);
+        };
+
+        autoScrollRafRef.current = requestAnimationFrame(tick);
+      };
+
+      const finishPress = (commitOrder: boolean) => {
+        stopAutoScroll();
+        if (state.timerId !== null) {
+          window.clearTimeout(state.timerId);
+          state.timerId = null;
+        }
+        cleanupListenersRef.current?.();
+        cleanupListenersRef.current = null;
+        if (pressRef.current === state) {
+          pressRef.current = null;
+        }
+        if (state.isDragging) {
+          suppressClickUntilRef.current = Date.now() + 280;
+          if (scrollContainerRef.current) {
+            savedScrollTopRef.current = scrollContainerRef.current.scrollTop;
+          }
+          const latestOrder = previewOrderRef.current;
+          const releasedId = state.cardId;
+          const visualEl = visualRefs.current.get(releasedId);
+
+          if (visualEl) {
+            setSettlingId(releasedId);
+            visualEl.style.transition = 'none';
+            visualEl.style.transform = `translate3d(${dragOffsetRef.current.x}px, ${dragOffsetRef.current.y}px, 0) scale(1.035)`;
+            visualEl.getBoundingClientRect();
+            settleRafRef.current = requestAnimationFrame(() => {
+              settleRafRef.current = requestAnimationFrame(() => {
+                settleRafRef.current = null;
+                const targetEl = visualRefs.current.get(releasedId);
+                if (!targetEl) return;
+                targetEl.style.transition = `transform ${DRAG_SETTLE_DURATION_MS}ms ${SILKY_EASING}`;
+                targetEl.style.transform = 'translate3d(0px, 0px, 0px) scale(1)';
+              });
+            });
+            settleTimerRef.current = window.setTimeout(() => {
+              settleTimerRef.current = null;
+              const targetEl = visualRefs.current.get(releasedId);
+              if (targetEl) {
+                targetEl.style.transition = '';
+                targetEl.style.transform = '';
+              }
+              setSettlingId(null);
+            }, DRAG_SETTLE_DURATION_MS + 30);
+          }
+
+          dragOffsetRef.current = { x: 0, y: 0 };
+          draggingIdRef.current = null;
+          setDraggingId(null);
+          setPreviewOrderIds(null);
+          if (commitOrder && latestOrder && latestOrder.length > 0) {
+            onReorderCharacters(latestOrder);
+          }
+        }
+      };
+
+      const handlePointerMove = (moveEvent: PointerEvent) => {
+        if (moveEvent.pointerId !== pointerId || pressRef.current !== state) {
+          return;
+        }
+        if (!state.isDragging) {
+          const dist = Math.hypot(
+            moveEvent.clientX - state.startX,
+            moveEvent.clientY - state.startY
+          );
+          if (dist > DRAG_MOVE_CANCEL_PX) {
+            finishPress(false);
+          }
+          return;
+        }
+
+        moveEvent.preventDefault();
+
+        const stepX = moveEvent.clientX - dragLastPointerRef.current.x;
+        const stepY = moveEvent.clientY - dragLastPointerRef.current.y;
+        dragLastPointerRef.current = {
+          x: moveEvent.clientX,
+          y: moveEvent.clientY,
+        };
+        dragOffsetRef.current = {
+          x: dragOffsetRef.current.x + stepX,
+          y: dragOffsetRef.current.y + stepY,
+        };
+
+        applyVisualTransform(
+          state.cardId,
+          dragOffsetRef.current.x,
+          dragOffsetRef.current.y,
+          1.035,
+          'none'
+        );
+
+        if (Math.abs(getEdgeAutoScrollVelocity(moveEvent.clientY)) >= 0.05) {
+          ensureAutoScrollLoop();
+        } else {
+          stopAutoScroll();
+        }
+
+        evaluateHoverSwap(moveEvent.clientX, moveEvent.clientY);
+      };
+
+      const handlePointerUp = (upEvent: PointerEvent) => {
+        if (upEvent.pointerId !== pointerId || pressRef.current !== state) {
+          return;
+        }
+        finishPress(true);
+      };
+
+      const handlePointerCancel = (cancelEvent: PointerEvent) => {
+        if (cancelEvent.pointerId !== pointerId || pressRef.current !== state) {
+          return;
+        }
+        finishPress(false);
+      };
+
+      window.addEventListener('pointermove', handlePointerMove, {
+        passive: false,
+      });
+      window.addEventListener('pointerup', handlePointerUp);
+      window.addEventListener('pointercancel', handlePointerCancel);
+
+      cleanupListenersRef.current = () => {
+        stopAutoScroll();
+        window.removeEventListener('pointermove', handlePointerMove);
+        window.removeEventListener('pointerup', handlePointerUp);
+        window.removeEventListener('pointercancel', handlePointerCancel);
+      };
+
+      state.timerId = window.setTimeout(() => {
+        state.timerId = null;
+        if (pressRef.current !== state) return;
+        state.isDragging = true;
+        dragOffsetRef.current = { x: 0, y: 0 };
+        dragLastPointerRef.current = { x: state.startX, y: state.startY };
+        const initialOrder = charactersRef.current.map((c) => c.id);
+        previewOrderRef.current = initialOrder;
+        draggingIdRef.current = state.cardId;
+        setPreviewOrderIds(initialOrder);
+        setDraggingId(state.cardId);
+
+        const visualEl = visualRefs.current.get(state.cardId);
+        if (visualEl) {
+          visualEl.style.transition =
+            'transform 180ms cubic-bezier(0.22, 1, 0.36, 1)';
+          visualEl.style.transform = 'translate3d(0px, 0px, 0) scale(1.035)';
+        }
+
+        if (Math.abs(getEdgeAutoScrollVelocity(state.startY)) >= 0.05) {
+          ensureAutoScrollLoop();
+        }
+
+        if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+          try {
+            navigator.vibrate(12);
+          } catch {
+            // ignore unsupported vibration errors
+          }
+        }
+      }, DRAG_HOLD_DELAY_MS);
+    },
+    [captureSlotRects, onReorderCharacters]
+  );
 
   const handlePngFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -272,19 +797,138 @@ export function AtriumLobby({
     }
   };
 
-  const allTags = useMemo(() => {
+  const orderedCharacters = useMemo(() => {
+    if (!previewOrderIds || previewOrderIds.length === 0) {
+      return characters;
+    }
+    const byId = new Map(characters.map((c) => [c.id, c]));
+    const resolved: Character[] = [];
+    for (const id of previewOrderIds) {
+      const char = byId.get(id);
+      if (char) {
+        resolved.push(char);
+        byId.delete(id);
+      }
+    }
+    for (const remaining of byId.values()) {
+      resolved.push(remaining);
+    }
+    return resolved;
+  }, [characters, previewOrderIds]);
+
+  // FLIP (First, Last, Invert, Play) neighbor glide & dragged card slot-delta compensation
+  useLayoutEffect(() => {
+    if (
+      savedScrollTopRef.current !== null &&
+      scrollContainerRef.current
+    ) {
+      scrollContainerRef.current.scrollTop = savedScrollTopRef.current;
+      savedScrollTopRef.current = null;
+    }
+
+    if (!pendingFlipRef.current) return;
+    pendingFlipRef.current = false;
+
+    const prevRects = prevRectsRef.current;
+    const activeDragId = draggingIdRef.current;
+
+    for (const [id, slotEl] of slotRefs.current.entries()) {
+      const prevRect = prevRects.get(id);
+      if (!prevRect) continue;
+
+      if (id === activeDragId) {
+        const newSlotRect = slotEl.getBoundingClientRect();
+        const slotDeltaX = newSlotRect.left - prevRect.left;
+        const slotDeltaY = newSlotRect.top - prevRect.top;
+        dragOffsetRef.current = {
+          x: dragOffsetRef.current.x - slotDeltaX,
+          y: dragOffsetRef.current.y - slotDeltaY,
+        };
+        const visualEl = visualRefs.current.get(id);
+        if (visualEl) {
+          visualEl.style.transition = 'none';
+          visualEl.style.transform = `translate3d(${dragOffsetRef.current.x}px, ${dragOffsetRef.current.y}px, 0) scale(1.035)`;
+        }
+        continue;
+      }
+
+      // Reset any in-flight transform briefly to measure true Last layout coordinates
+      const existingTransform = slotEl.style.transform;
+      slotEl.style.transition = 'none';
+      slotEl.style.transform = 'none';
+      const newRect = slotEl.getBoundingClientRect();
+
+      const deltaX = prevRect.left - newRect.left;
+      const deltaY = prevRect.top - newRect.top;
+
+      if (Math.abs(deltaX) < 0.5 && Math.abs(deltaY) < 0.5) {
+        slotEl.style.transform = existingTransform === 'translate3d(0px, 0px, 0px)' ? '' : existingTransform;
+        continue;
+      }
+
+      const prevRaf = flipRafIdsRef.current.get(id);
+      if (prevRaf !== undefined) {
+        cancelAnimationFrame(prevRaf);
+        flipRafIdsRef.current.delete(id);
+      }
+
+      const prevTimer = flipCleanupTimersRef.current.get(id);
+      if (prevTimer !== undefined) {
+        window.clearTimeout(prevTimer);
+      }
+
+      slotEl.style.willChange = 'transform';
+      slotEl.style.transition = 'none';
+      slotEl.style.transform = `translate3d(${deltaX}px, ${deltaY}px, 0)`;
+      slotEl.getBoundingClientRect();
+
+      // Double-rAF guarantees the browser paints the inverted frame before transitioning
+      const firstRaf = requestAnimationFrame(() => {
+        const secondRaf = requestAnimationFrame(() => {
+          flipRafIdsRef.current.delete(id);
+          const currentEl = slotRefs.current.get(id);
+          if (!currentEl) return;
+          currentEl.style.transition = `transform ${FLIP_NEIGHBOR_DURATION_MS}ms ${SILKY_EASING}`;
+          currentEl.style.transform = 'translate3d(0px, 0px, 0px)';
+        });
+        flipRafIdsRef.current.set(id, secondRaf);
+      });
+      flipRafIdsRef.current.set(id, firstRaf);
+
+      const cleanupTimer = window.setTimeout(() => {
+        flipCleanupTimersRef.current.delete(id);
+        const currentEl = slotRefs.current.get(id);
+        if (currentEl) {
+          currentEl.style.transition = '';
+          currentEl.style.transform = '';
+          currentEl.style.willChange = '';
+        }
+      }, FLIP_NEIGHBOR_DURATION_MS + 40);
+      flipCleanupTimersRef.current.set(id, cleanupTimer);
+    }
+  }, [orderedCharacters]);
+
+  const availableTags = useMemo(() => {
     const tagSet = new Set<string>();
     characters.forEach((char) => {
       char.tags.forEach((tag) => {
-        if (tag.trim()) tagSet.add(tag.trim());
+        const trimmed = tag.trim();
+        if (trimmed) tagSet.add(trimmed);
       });
     });
-    return [ALL_TAG_KEY, ...Array.from(tagSet).slice(0, 10)];
+    const sortedTags = Array.from(tagSet)
+      .sort(
+        (a, b) =>
+          a.localeCompare(b, undefined, { sensitivity: 'base' }) ||
+          a.localeCompare(b)
+      )
+      .slice(0, 10);
+    return [ALL_TAG_KEY, ...sortedTags];
   }, [characters]);
 
   const filteredCharacters = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
-    return characters.filter((char) => {
+    return orderedCharacters.filter((char) => {
       const matchesTag =
         activeTag === ALL_TAG_KEY ||
         char.tags.some((tag) => tag.toLowerCase() === activeTag.toLowerCase());
@@ -298,64 +942,70 @@ export function AtriumLobby({
         char.systemPrompt.toLowerCase().includes(q)
       );
     });
-  }, [characters, searchQuery, activeTag]);
+  }, [orderedCharacters, searchQuery, activeTag]);
 
   const hasPersonaName = Boolean(userPersona.name.trim());
 
   return (
-    <div
-      className="relative flex h-full w-full flex-col overflow-hidden transition-colors duration-700 ease-in-out"
-      style={{
-        backgroundColor: 'var(--theme-bg)',
-        backgroundImage:
-          'radial-gradient(ellipse 80% 55% at 50% -10%, var(--theme-accent-soft), transparent 70%)',
-      }}
-    >
-      {/* Dynamic Theme-Synced Liquid Glass Flow Background (14s–18s continuous swirl) */}
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-0 z-0 hidden overflow-hidden sm:block"
-      >
+    <div className="relative flex h-full w-full flex-col overflow-hidden bg-[#050507]">
+      {/* Obsidian (#050507) Lobby Ambient Layer: Orbital Liquid Clouds (v1.5.2) or Classic Obsidian Static (v1.5.1) */}
+      {backdropMode === 'orbital-clouds' ? (
         <div
-          className="absolute -top-32 -left-24 h-[620px] w-[620px] rounded-full blur-[110px] transition-colors duration-700 ease-in-out"
+          aria-hidden="true"
+          className="mobile-bg-gpu-layer fixed inset-0 z-0 pointer-events-none overflow-hidden"
+        >
+          <div
+            className="liquid-ambient-orb absolute top-[28%] left-[26%] h-[760px] w-[760px] rounded-full sm:h-[980px] sm:w-[980px]"
+            style={{
+              background:
+                'radial-gradient(circle, color-mix(in srgb, var(--accent-primary, #8b5cf6) 24%, transparent) 0%, color-mix(in srgb, var(--accent-glow, #6d28d9) 9%, transparent) 44%, transparent 72%)',
+              animationName: 'atriumOrbitWide',
+              animationDuration: '34s',
+              animationTimingFunction: 'linear',
+              animationIterationCount: 'infinite',
+              animationPlayState: 'running',
+              willChange: 'transform',
+            }}
+          />
+          <div
+            className="liquid-ambient-orb absolute top-[54%] left-[74%] h-[680px] w-[680px] rounded-full sm:h-[880px] sm:w-[880px]"
+            style={{
+              background:
+                'radial-gradient(circle, color-mix(in srgb, var(--accent-glow, #7c3aed) 20%, transparent) 0%, rgba(76, 29, 149, 0.08) 46%, transparent 72%)',
+              animationName: 'atriumOrbit',
+              animationDuration: '44s',
+              animationTimingFunction: 'linear',
+              animationIterationCount: 'infinite',
+              animationDirection: 'reverse',
+              animationPlayState: 'running',
+              willChange: 'transform',
+            }}
+          />
+          <div
+            className="liquid-ambient-orb absolute top-[74%] left-[40%] h-[560px] w-[560px] rounded-full sm:h-[740px] sm:w-[740px]"
+            style={{
+              background:
+                'radial-gradient(circle, rgba(229, 204, 160, 0.11) 0%, color-mix(in srgb, var(--accent-primary, #8b5cf6) 6%, transparent) 46%, transparent 72%)',
+              animationName: 'atriumOrbitWide',
+              animationDuration: '50s',
+              animationTimingFunction: 'linear',
+              animationIterationCount: 'infinite',
+              animationDelay: '-14s',
+              animationPlayState: 'running',
+              willChange: 'transform',
+            }}
+          />
+        </div>
+      ) : (
+        <div
+          aria-hidden="true"
+          className="fixed inset-0 z-0 pointer-events-none overflow-hidden"
           style={{
-            opacity: 0.34,
-            backgroundColor: 'var(--theme-orb-1, #6d28d9)',
-            maskImage:
-              'radial-gradient(circle, rgba(0,0,0,1) 0%, rgba(0,0,0,0.45) 44%, transparent 74%)',
-            WebkitMaskImage:
-              'radial-gradient(circle, rgba(0,0,0,1) 0%, rgba(0,0,0,0.45) 44%, transparent 74%)',
-            animation: 'liquidOrbDriftA 14s ease-in-out infinite',
-            willChange: 'transform, border-radius',
+            background:
+              'radial-gradient(ellipse 80% 45% at 50% -5%, color-mix(in srgb, var(--accent-primary, #8b5cf6) 22%, transparent) 0%, rgba(88, 28, 135, 0.08) 45%, transparent 78%)',
           }}
         />
-        <div
-          className="absolute top-[14%] right-[-10%] h-[600px] w-[600px] rounded-full blur-[110px] transition-colors duration-700 ease-in-out"
-          style={{
-            opacity: 0.32,
-            backgroundColor: 'var(--theme-orb-2, #4c1d95)',
-            maskImage:
-              'radial-gradient(circle, rgba(0,0,0,1) 0%, rgba(0,0,0,0.46) 46%, transparent 74%)',
-            WebkitMaskImage:
-              'radial-gradient(circle, rgba(0,0,0,1) 0%, rgba(0,0,0,0.46) 46%, transparent 74%)',
-            animation: 'liquidOrbDriftB 16s ease-in-out infinite',
-            willChange: 'transform, border-radius',
-          }}
-        />
-        <div
-          className="absolute -bottom-36 left-[24%] h-[640px] w-[640px] rounded-full blur-[110px] transition-colors duration-700 ease-in-out"
-          style={{
-            opacity: 0.3,
-            backgroundColor: 'var(--theme-orb-3, #1e1b4b)',
-            maskImage:
-              'radial-gradient(circle, rgba(0,0,0,1) 0%, rgba(0,0,0,0.44) 45%, transparent 75%)',
-            WebkitMaskImage:
-              'radial-gradient(circle, rgba(0,0,0,1) 0%, rgba(0,0,0,0.44) 45%, transparent 75%)',
-            animation: 'liquidOrbDriftC 18s ease-in-out infinite',
-            willChange: 'transform, border-radius',
-          }}
-        />
-      </div>
+      )}
 
       {/* Top Spatial Header */}
       <header className="pt-safe relative z-20 shrink-0 border-b border-[rgba(255,255,255,0.12)] bg-[var(--theme-glass)] backdrop-blur-2xl transition-colors duration-700 ease-in-out sm:pt-0">
@@ -585,7 +1235,11 @@ export function AtriumLobby({
       </header>
 
       {/* Scrollable Lobby Content */}
-      <div className="relative z-10 flex-1 overflow-y-auto">
+      <div
+        ref={scrollContainerRef}
+        style={{ overflowAnchor: 'none' }}
+        className="relative z-10 flex-1 overflow-y-auto"
+      >
         <div className="mx-auto max-w-7xl px-5 py-7 sm:px-8 sm:py-9">
           {/* Greeting Header */}
           <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
@@ -608,7 +1262,7 @@ export function AtriumLobby({
               <input
                 ref={pngInputRef}
                 type="file"
-                accept=".png,image/png"
+                accept=".png,.json,image/png,application/json"
                 onChange={handlePngFileChange}
                 className="hidden"
               />
@@ -671,9 +1325,9 @@ export function AtriumLobby({
               />
             </label>
 
-            {allTags.length > 1 ? (
+            {availableTags.length > 1 ? (
               <div className="no-scrollbar flex flex-nowrap snap-x items-center gap-2 overflow-x-auto pb-1 sm:flex-wrap sm:gap-1.5 sm:overflow-visible sm:pb-0">
-                {allTags.map((tag) => {
+                {availableTags.map((tag) => {
                   const selected = activeTag === tag;
                   const label =
                     tag === ALL_TAG_KEY ? t.allTag : sanitizeRenderedText(tag);
@@ -708,7 +1362,13 @@ export function AtriumLobby({
               </p>
             </div>
           ) : (
-            <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-5 lg:grid-cols-3 xl:grid-cols-4 pb-safe sm:pb-0">
+            <div
+              ref={gridRef}
+              style={{ overflowAnchor: 'none' }}
+              className={`relative mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-5 lg:grid-cols-3 xl:grid-cols-4 pb-safe sm:pb-0 ${
+                draggingId ? 'select-none touch-none' : ''
+              }`}
+            >
               {filteredCharacters.map((char, index) => (
                 <LobbyCharacterCard
                   key={char.id}
@@ -717,10 +1377,31 @@ export function AtriumLobby({
                   index={index}
                   introDone={introDone}
                   isRecent={char.id === activeCharacterId}
+                  isDragging={draggingId === char.id}
+                  isSettling={settlingId === char.id}
+                  isAnyDragging={draggingId !== null}
                   messageCount={messageCounts[char.id] ?? 0}
-                  onEnterScene={() => onEnterScene(char)}
+                  onEnterScene={() => {
+                    if (Date.now() < suppressClickUntilRef.current) return;
+                    onEnterScene(char);
+                  }}
                   onOpenProfile={() => onOpenCharacterProfile(char)}
                   onEdit={() => onEditCharacter(char)}
+                  onPointerDown={(e) => handleCardPointerDown(e, char.id)}
+                  registerSlotRef={(el) => {
+                    if (el) {
+                      slotRefs.current.set(char.id, el);
+                    } else {
+                      slotRefs.current.delete(char.id);
+                    }
+                  }}
+                  registerVisualRef={(el) => {
+                    if (el) {
+                      visualRefs.current.set(char.id, el);
+                    } else {
+                      visualRefs.current.delete(char.id);
+                    }
+                  }}
                 />
               ))}
             </div>

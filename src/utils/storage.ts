@@ -4,6 +4,7 @@ import type {
   Character,
   ChatMessage,
   Language,
+  LobbyBackdropMode,
   OllamaSettings,
   StoryMemoryEntry,
   ThemeId,
@@ -26,6 +27,7 @@ import {
 
 export const STORAGE_KEYS = {
   characters: 'atrium.characters.v1',
+  characterOrder: 'atrium_character_order_v1',
   activeCharacterId: 'atrium.activeCharacterId.v1',
   conversations: 'atrium.conversations.v1',
   storyMemories: 'atrium.storyMemories.v1',
@@ -40,6 +42,8 @@ export const STORAGE_KEYS = {
   visualSettings: 'atrium.visualSettings.v1',
   mobileSyncUpdatedAt: 'atrium.mobileSyncUpdatedAt.v1',
 } as const;
+
+export const LOBBY_BACKDROP_MODE_STORAGE_KEY = 'atrium_lobby_backdrop_mode';
 
 const IDB_NAME = 'atrium-db';
 const IDB_VERSION = 1;
@@ -313,11 +317,34 @@ export interface PersistedAppState {
   visualSettings: VisualStudioSettings;
 }
 
+export function loadSavedLobbyBackdropMode(): LobbyBackdropMode {
+  if (typeof window === 'undefined') return 'orbital-clouds';
+  try {
+    const raw = window.localStorage.getItem(LOBBY_BACKDROP_MODE_STORAGE_KEY);
+    return raw === 'obsidian-static' ? 'obsidian-static' : 'orbital-clouds';
+  } catch {
+    return 'orbital-clouds';
+  }
+}
+
+export function saveLobbyBackdropMode(mode: LobbyBackdropMode): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(LOBBY_BACKDROP_MODE_STORAGE_KEY, mode);
+  } catch {
+    // Ignore localStorage quota errors
+  }
+}
+
 export function hydrateVisualSettings(
   raw: Partial<VisualStudioSettings> | undefined
 ): VisualStudioSettings {
+  const fallbackBackdropMode = loadSavedLobbyBackdropMode();
   if (!raw || typeof raw !== 'object') {
-    return DEFAULT_VISUAL_STUDIO_SETTINGS;
+    return {
+      ...DEFAULT_VISUAL_STUDIO_SETTINGS,
+      lobbyBackdropMode: fallbackBackdropMode,
+    };
   }
   const fontFamily =
     raw.fontFamily === 'serif' || raw.fontFamily === 'mono'
@@ -331,11 +358,17 @@ export function hydrateVisualSettings(
     typeof raw.glassOpacity === 'number' && !Number.isNaN(raw.glassOpacity)
       ? Math.min(95, Math.max(20, Math.round(raw.glassOpacity)))
       : DEFAULT_VISUAL_STUDIO_SETTINGS.glassOpacity;
+  const lobbyBackdropMode: LobbyBackdropMode =
+    raw.lobbyBackdropMode === 'obsidian-static' ||
+    raw.lobbyBackdropMode === 'orbital-clouds'
+      ? raw.lobbyBackdropMode
+      : fallbackBackdropMode;
 
   return {
     fontFamily,
     textSize,
     glassOpacity,
+    lobbyBackdropMode,
     customUserBubbleColor: isValidHexColor(raw.customUserBubbleColor)
       ? raw.customUserBubbleColor
       : undefined,
@@ -589,8 +622,13 @@ export async function loadAllPersistedState(): Promise<PersistedAppState> {
       )
   );
 
-  return {
+  const orderedCharacters = applyCharacterOrder(
     characters,
+    loadSavedCharacterOrder()
+  );
+
+  return {
+    characters: orderedCharacters,
     activeCharacterId,
     conversations,
     storyMemories,
@@ -603,6 +641,83 @@ export async function loadAllPersistedState(): Promise<PersistedAppState> {
     parallaxEnabled,
     visualSettings,
   };
+}
+
+export function loadSavedCharacterOrder(): string[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw =
+      window.localStorage.getItem(STORAGE_KEYS.characterOrder) ??
+      window.localStorage.getItem('atrium.characterOrder.v1');
+    if (!raw) return [];
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    const seen = new Set<string>();
+    const clean: string[] = [];
+    for (const entry of parsed) {
+      if (typeof entry === 'string') {
+        const trimmed = entry.trim();
+        if (trimmed && !seen.has(trimmed)) {
+          seen.add(trimmed);
+          clean.push(trimmed);
+        }
+      }
+    }
+    return clean;
+  } catch {
+    return [];
+  }
+}
+
+export function saveCharacterOrder(order: string[]): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const seen = new Set<string>();
+    const clean: string[] = [];
+    for (const entry of order) {
+      if (typeof entry === 'string') {
+        const trimmed = entry.trim();
+        if (trimmed && !seen.has(trimmed)) {
+          seen.add(trimmed);
+          clean.push(trimmed);
+        }
+      }
+    }
+    window.localStorage.setItem(
+      STORAGE_KEYS.characterOrder,
+      JSON.stringify(clean)
+    );
+  } catch {
+    // Ignore localStorage quota errors
+  }
+}
+
+export function applyCharacterOrder(
+  chars: Character[],
+  order: string[]
+): Character[] {
+  if (!Array.isArray(order) || order.length === 0 || chars.length <= 1) {
+    return chars;
+  }
+  const orderIndex = new Map<string, number>();
+  order.forEach((id, idx) => {
+    if (!orderIndex.has(id)) {
+      orderIndex.set(id, idx);
+    }
+  });
+  const unordered: Character[] = [];
+  const ordered: Character[] = [];
+  for (const char of chars) {
+    if (orderIndex.has(char.id)) {
+      ordered.push(char);
+    } else {
+      unordered.push(char);
+    }
+  }
+  ordered.sort(
+    (a, b) => (orderIndex.get(a.id) ?? 0) - (orderIndex.get(b.id) ?? 0)
+  );
+  return [...unordered, ...ordered];
 }
 
 export async function loadMobileSyncUpdatedAt(): Promise<number> {
