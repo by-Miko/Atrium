@@ -1,12 +1,12 @@
-# Security Policy & Hardened Architecture — Atrium (v1.5.0)
+# Security Policy & Hardened Architecture — Atrium
 
 ## Supported Versions / Versiones Soportadas
 
 | Version | Status | Security Baseline |
 | :--- | :--- | :--- |
-| **v1.5.0** | ✅ Supported (Latest) | Full CSP, IPC Lockdown, Electron Fuses, DPAPI, Ephemeral Mobile Link Auth |
+| **v1.5.x** | ✅ Supported (Latest) | Full CSP, IPC Lockdown, Electron Fuses, DPAPI, Multi-Mesh VPN & Mobile Link Auth |
 | **v1.4.1** | ⚠️ Legacy | Full CSP, IPC Lockdown, Electron Fuses, DPAPI |
-| `< 1.4.0` | ❌ Unsupported | Upgrade to v1.5.0+ |
+| `< 1.4.0` | ❌ Unsupported | Upgrade to v1.5.x |
 
 ---
 
@@ -37,13 +37,15 @@ Enforced simultaneously via `<meta>` (`index.html`) and HTTP response headers in
 - Blocks `unsafe-eval` and `object-src 'none'`.
 - Restricts origins strictly to `'self'`, Google Fonts, `data:`, `blob:`, `https:`, `http://localhost:*`, `http://127.0.0.1:*`, and the Tailscale CGNAT subnet `http://100.*`.
 
-## 5. Atrium Mobile Link Hardening (LAN & Tailscale Bridge)
+## 5. Atrium Mobile Link Hardening (LAN & Multi-Mesh VPN)
 - **Ephemeral Cryptographic Session Token:** Generates a 24-byte random token (`crypto.randomBytes(24).toString('hex')`) per session, verified in constant time via `crypto.timingSafeEqual`.
 - **Strict Session Cookies & URL Scrubbing:** Issues `HttpOnly; SameSite=Strict; Path=/` session cookies upon validating `?ml_token=`, immediately strips the token from the browser URL bar (`history.replaceState`), and requires a valid cookie or `X-Atrium-Link-Token` header on `/api/*`, `/v1/*`, and `/mobile-sync/*` (returning `401 Unauthorized` otherwise).
 - **Loopback-Only SSRF Protection:** Local proxy routes (`/api/*` and `/v1/*`) strictly restrict upstream targets to `127.0.0.1` loopback ports, preventing Server-Side Request Forgery to arbitrary external hosts.
 - **Prototype Pollution & Secret Filtering in Sync:** `/mobile-sync/state` enforces a `25 MB` payload cap and recursively strips dangerous keys (`__proto__`, `constructor`, `prototype`) as well as any `apiKey` or `SAFE_V1:` properties.
 - **Path Traversal Protection:** Static PWA hosting blocks any request attempting to resolve outside `dist/`.
 - **Instant Socket Teardown:** Toggling Mobile Link off or quitting the app immediately destroys active connections (`server.closeAllConnections()`) in `0 ms`.
+- **Physical Device Deduplication (`deviceId`, v1.5.1)**: Active SSE clients are tracked per unique ephemeral `deviceId`, preventing duplicate connection counts during streaming chats.
+- **Multi-Mesh VPN & Public Wi-Fi Audit (v1.5.1)**: Native detection for **Tailscale**, **ZeroTier**, **NetBird**, and **WireGuard** virtual adapters, paired with active security advisories against unencrypted external/public Wi-Fi routers (`AP Isolation` and LAN interception risks).
 
 ## 6. Anti-XSS, Sanitization & Anti-DoS Controls
 - **Zero Raw HTML Injection:** No `dangerouslySetInnerHTML` or `innerHTML` anywhere in the codebase.
@@ -58,7 +60,7 @@ If you discover a security issue in Atrium, please report it privately via GitHu
 
 ---
 
-# Política de Seguridad y Arquitectura Blindada — Atrium (v1.5.0)
+## Política de Seguridad y Arquitectura Blindada — Atrium
 
 ## 1. Aislamiento del Proceso Principal y Preload (Electron)
 - **Sandboxing Estricto:** `contextIsolation: true`, `nodeIntegration: false`, `sandbox: true` y `webSecurity: true`.
@@ -87,13 +89,15 @@ Aplicada simultáneamente mediante `<meta>` (`index.html`) y cabeceras HTTP en `
 - Bloquea `unsafe-eval` y `object-src 'none'`.
 - Restringe orígenes exclusivamente a `'self'`, Google Fonts, `data:`, `blob:`, `https:`, `http://localhost:*`, `http://127.0.0.1:*` y la subred CGNAT de Tailscale `http://100.*`.
 
-## 5. Blindaje de Atrium Mobile Link (Puente LAN y Tailscale)
+## 5. Blindaje de Atrium Mobile Link (Puente LAN y Multi-Mesh VPN)
 - **Token Efímero Criptográfico:** Genera un token aleatorio de 24 bytes (`crypto.randomBytes(24).toString('hex')`) por sesión, validado en tiempo constante con `crypto.timingSafeEqual`.
 - **Cookies de Sesión Estrictas y Limpieza de URL:** Emite cookies `HttpOnly; SameSite=Strict; Path=/` tras validar `?ml_token=`, elimina de inmediato el token de la barra de direcciones (`history.replaceState`) y exige cookie válida o cabecera `X-Atrium-Link-Token` en `/api/*`, `/v1/*` y `/mobile-sync/*` (rechazando peticiones no autorizadas con `401 Unauthorized`).
 - **Protección SSRF Loopback-Only:** Las rutas proxy locales (`/api/*` y `/v1/*`) restringen su destino únicamente a puertos loopback `127.0.0.1`, impidiendo redirecciones hacia servidores externos arbitrarios.
 - **Filtrado Anti-Prototype Pollution en Sync:** `/mobile-sync/state` aplica un límite de `25 MB` y filtra recursivamente propiedades peligrosas (`__proto__`, `constructor`, `prototype`), así como cualquier clave `apiKey` o `SAFE_V1:`.
 - **Protección contra Path Traversal:** El servidor estático de la PWA bloquea cualquier solicitud que intente escapar del directorio `dist/`.
 - **Cierre Inmediato de Sockets:** Al apagar Mobile Link o cerrar la app, se destruyen las conexiones activas (`server.closeAllConnections()`) en `0 ms`.
+- **Deduplicación Real de Dispositivos (`deviceId`, v1.5.1)**: Los clientes SSE activos se rastrean mediante un identificador efímero único (`deviceId`), evitando el conteo duplicado de conexiones durante el chat en streaming.
+- **Auditoría en Redes Públicas y Multi-Mesh VPN (v1.5.1)**: Detección nativa de adaptadores virtuales de **Tailscale**, **ZeroTier**, **NetBird** y **WireGuard**, acompañada de advertencias preventivas frente a redes Wi-Fi públicas sin cifrar (`AP Isolation` e interceptación en LAN).   
 
 ## 6. Controles Anti-XSS, Sanitización y Anti-DoS
 - **Cero Inyección HTML Cruda:** Sin `dangerouslySetInnerHTML` ni `innerHTML` en todo el código.
@@ -105,9 +109,3 @@ Aplicada simultáneamente mediante `<meta>` (`index.html`) y cabeceras HTTP en `
 
 ## Reportar una Vulnerabilidad
 Si descubres un problema de seguridad en Atrium, repórtalo de forma privada mediante GitHub Security Advisories (`Security > Advisories > Report a vulnerability`) en lugar de abrir un issue público.
-
-## 🛡️ Mobile Link & Network Hardening (v1.5.1)
-- **Ephemeral 24-Byte Pairing Token & HttpOnly Cookie:** Every Mobile Link session requires a cryptographically random 24-byte ml_token exchanged for a SameSite=Strict; HttpOnly session cookie.
-- **Physical Device Deduplication (deviceId):** Active SSE clients are tracked per unique ephemeral deviceId, preventing connection inflation and enforcing clean session accounting.
-- **Multi-Mesh VPN Isolation (Tailscale, ZeroTier, NetBird, WireGuard):** Native detection of encrypted mesh virtual interfaces alongside active user advisories against unencrypted public Wi-Fi (AP Isolation / LAN sniffing risks).
-- **Double-Layer CSP & SSRF Guards:** Strict Content Security Policy headers on both Desktop (ile://) and Mobile Link HTTP responses, with strict localhost/LAN allowlisting on proxy endpoints.
