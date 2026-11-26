@@ -1,4 +1,5 @@
 import {
+  AlertTriangle,
   Check,
   Copy,
   Globe,
@@ -34,9 +35,12 @@ export function MobileLinkModal({
   const [selectedUrlIndex, setSelectedUrlIndex] = useState(0);
   const [qrDataUrl, setQrDataUrl] = useState<string>('');
   const [isToggling, setIsToggling] = useState(false);
+  const [isRescanning, setIsRescanning] = useState(false);
+  const [rotateCount, setRotateCount] = useState(0);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [copiedUrl, setCopiedUrl] = useState(false);
 
+  const wasOpenRef = useRef(false);
   const userDisabledRef = useRef(false);
   const isTogglingRef = useRef(false);
   const onStatusChangeRef = useRef(onStatusChange);
@@ -57,20 +61,30 @@ export function MobileLinkModal({
   const activeUrl =
     activeUrls[selectedUrlIndex] ?? activeUrls[0] ?? '';
 
-  // Auto-select whichever interface category has detected URLs when opened/updated
+  // Pick initial tab only when modal opens (never bounce user away from Mesh VPN tab)
   useEffect(() => {
-    if (networkTab === 'lan' && lanUrls.length === 0 && tailscaleUrls.length > 0) {
-      setNetworkTab('tailscale');
-      setSelectedUrlIndex(0);
-    } else if (
-      networkTab === 'tailscale' &&
-      tailscaleUrls.length === 0 &&
-      lanUrls.length > 0
-    ) {
-      setNetworkTab('lan');
+    if (!isOpen) {
+      wasOpenRef.current = false;
+      setRotateCount(0);
+      return;
+    }
+    if (!wasOpenRef.current) {
+      wasOpenRef.current = true;
+      setRotateCount(0);
+      if (lanUrls.length === 0 && tailscaleUrls.length > 0) {
+        setNetworkTab('tailscale');
+      } else {
+        setNetworkTab('lan');
+      }
       setSelectedUrlIndex(0);
     }
-  }, [lanUrls.length, networkTab, tailscaleUrls.length]);
+  }, [isOpen, lanUrls.length, tailscaleUrls.length]);
+
+  useEffect(() => {
+    if (status.connectedClients > 0) {
+      setRotateCount(0);
+    }
+  }, [status.connectedClients]);
 
   useEffect(() => {
     if (selectedUrlIndex >= activeUrls.length) {
@@ -234,6 +248,7 @@ export function MobileLinkModal({
     setIsToggling(true);
     setErrorMsg(null);
     setCopiedUrl(false);
+    setRotateCount((prev) => prev + 1);
 
     try {
       const next = await startApi({ forceRotate: true });
@@ -247,6 +262,23 @@ export function MobileLinkModal({
       setIsToggling(false);
     }
   }, []);
+
+  const handleRescanNetwork = useCallback(async () => {
+    const statusApi = window.electronAPI?.getMobileLinkStatus;
+    if (!statusApi || isRescanning) return;
+    setIsRescanning(true);
+    setErrorMsg(null);
+    try {
+      const next = await statusApi();
+      if (next) {
+        onStatusChangeRef.current(next);
+      }
+    } catch {
+      // ignore transient network rescan error
+    } finally {
+      setIsRescanning(false);
+    }
+  }, [isRescanning]);
 
   const handleCopyUrl = useCallback(async () => {
     if (!activeUrl) return;
@@ -280,6 +312,12 @@ export function MobileLinkModal({
 
   if (!isOpen) return null;
 
+  const showPublicWifiAdvisory =
+    status.active &&
+    networkTab === 'lan' &&
+    status.connectedClients === 0 &&
+    rotateCount >= 3;
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-md"
@@ -288,12 +326,14 @@ export function MobileLinkModal({
       aria-labelledby="mobile-link-modal-title"
       onClick={(e) => {
         if (e.target === e.currentTarget) {
+          e.preventDefault();
+          e.stopPropagation();
           onClose();
         }
       }}
     >
       <div
-        className="relative flex max-h-[92dvh] w-full max-w-lg flex-col overflow-hidden rounded-[28px] border border-[rgba(255,255,255,0.16)] bg-[var(--theme-panel)] shadow-[inset_1px_1px_0_rgba(255,255,255,0.18),0_28px_80px_rgba(0,0,0,0.8)]"
+        className="relative flex max-h-[92dvh] w-full max-w-lg flex-col overflow-hidden rounded-[28px] border border-[rgba(255,255,255,0.16)] bg-[var(--theme-panel)] shadow-[inset_1px_1px_0_rgba(255,255,255,0.18),0_28px_80px_rgba(0,0,0,0.8)] sm:max-w-[540px]"
         style={{
           backdropFilter: 'blur(20px) saturate(165%)',
           WebkitBackdropFilter: 'blur(20px) saturate(165%)',
@@ -320,7 +360,11 @@ export function MobileLinkModal({
 
           <button
             type="button"
-            onClick={onClose}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onClose();
+            }}
             aria-label={t.dismiss}
             className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[var(--theme-muted)] transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-2 focus-visible:outline-[var(--theme-accent)]"
           >
@@ -330,38 +374,38 @@ export function MobileLinkModal({
 
         {/* Scrollable Body */}
         <div className="flex-1 space-y-4 overflow-y-auto px-6 py-5">
-          {/* Server Toggle & Live Metrics */}
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/12 bg-black/35 px-4 py-3">
-            <div className="flex items-center gap-2.5">
+          {/* Server Toggle & Live Metrics (zero layout-shift single row) */}
+          <div className="flex items-center justify-between gap-3 rounded-2xl border border-white/12 bg-black/35 px-4 py-3">
+            <div className="flex min-w-0 flex-1 items-center gap-2.5">
               <span
                 aria-hidden="true"
-                className={`h-2.5 w-2.5 rounded-full ${
+                className={`h-2.5 w-2.5 shrink-0 rounded-full ${
                   status.active
                     ? 'bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.9)]'
                     : 'bg-white/30'
                 }`}
               />
-              <div>
-                <p className="text-xs font-semibold text-white">
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-xs font-semibold text-white tabular-nums">
                   {isToggling && !status.active
                     ? t.mobileLinkStarting
                     : status.active
                       ? t.mobileLinkStatusActive
                       : t.mobileLinkStatusStopped}
                   {status.active && status.port ? (
-                    <span className="ml-1.5 font-mono text-[11px] font-normal text-white/60">
+                    <span className="ml-1.5 font-mono text-[11px] font-normal text-white/60 tabular-nums">
                       :{status.port}
                     </span>
                   ) : null}
                 </p>
-                <p className="mt-0.5 text-[11px] text-[var(--theme-muted)]">
+                <p className="mt-0.5 truncate text-[11px] text-[var(--theme-muted)] tabular-nums">
                   {t.mobileLinkConnectedClients(status.connectedClients)} ·{' '}
                   {formattedLastSync}
                 </p>
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex w-[166px] shrink-0 items-center justify-end gap-2">
               {status.active ? (
                 <button
                   type="button"
@@ -369,10 +413,10 @@ export function MobileLinkModal({
                   disabled={isToggling}
                   title={t.mobileLinkRefreshToken}
                   aria-label={t.mobileLinkRefreshToken}
-                  className="inline-flex h-8 items-center gap-1.5 rounded-full border border-white/12 bg-white/5 px-3 text-[11px] font-medium text-white/85 transition-colors hover:border-white/25 hover:bg-white/10 hover:text-white disabled:opacity-50"
+                  className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-white/12 bg-white/5 px-3 text-[11px] font-medium text-white/85 whitespace-nowrap transition-colors hover:border-white/25 hover:bg-white/10 hover:text-white disabled:opacity-50"
                 >
                   <RefreshCw
-                    className={`h-3 w-3 ${isToggling ? 'animate-spin' : ''}`}
+                    className={`h-3 w-3 shrink-0 ${isToggling ? 'animate-spin' : ''}`}
                   />
                   <span>{t.mobileLinkRefreshToken}</span>
                 </button>
@@ -409,7 +453,7 @@ export function MobileLinkModal({
             </div>
           ) : null}
 
-          {/* Network Interface Switcher (Wi-Fi LAN vs Tailscale VPN) */}
+          {/* Network Interface Switcher (Wi-Fi LAN vs Mesh VPN) */}
           <div
             role="tablist"
             aria-label={t.mobileLinkTitle}
@@ -424,14 +468,14 @@ export function MobileLinkModal({
                 setSelectedUrlIndex(0);
                 setCopiedUrl(false);
               }}
-              className={`inline-flex items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold transition-colors ${
+              className={`inline-flex items-center justify-center gap-1.5 rounded-xl px-2.5 py-2 text-xs font-semibold transition-colors ${
                 networkTab === 'lan'
                   ? 'bg-[var(--theme-accent)] text-[var(--theme-on-accent)] shadow-sm'
                   : 'text-[var(--theme-muted)] hover:bg-white/5 hover:text-white'
               }`}
             >
               <Wifi className="h-3.5 w-3.5 shrink-0" />
-              <span>{t.mobileLinkLanTab}</span>
+              <span className="whitespace-nowrap">{t.mobileLinkLanTab}</span>
               {lanUrls.length > 0 ? (
                 <span className="ml-0.5 font-mono text-[10px] opacity-80">
                   ({lanUrls.length})
@@ -447,107 +491,211 @@ export function MobileLinkModal({
                 setNetworkTab('tailscale');
                 setSelectedUrlIndex(0);
                 setCopiedUrl(false);
+                setRotateCount(0);
               }}
-              className={`inline-flex items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold transition-colors ${
+              className={`inline-flex items-center justify-center gap-1.5 rounded-xl px-2.5 py-2 text-xs font-semibold transition-colors ${
                 networkTab === 'tailscale'
                   ? 'bg-[var(--theme-accent)] text-[var(--theme-on-accent)] shadow-sm'
                   : 'text-[var(--theme-muted)] hover:bg-white/5 hover:text-white'
               }`}
             >
               <Globe className="h-3.5 w-3.5 shrink-0" />
-              <span>{t.mobileLinkTailscaleTab}</span>
-              {tailscaleUrls.length > 0 ? (
-                <span className="ml-0.5 font-mono text-[10px] opacity-80">
-                  ({tailscaleUrls.length})
+              <span className="whitespace-nowrap">{t.mobileLinkTailscaleTab}</span>
+              {tailscaleUrls.length > 0 && status.vpnProvider ? (
+                <span
+                  className={`truncate rounded-full px-1.5 py-0.5 text-[10px] font-medium leading-none ${
+                    networkTab === 'tailscale'
+                      ? 'bg-black/20 text-current'
+                      : 'border border-white/12 bg-white/[0.06] text-white/80'
+                  }`}
+                >
+                  {status.vpnProvider}
                 </span>
-              ) : null}
+              ) : (
+                <span className="truncate text-[10px] font-normal opacity-75">
+                  {t.mobileLinkMeshVpnOfflineSub}
+                </span>
+              )}
             </button>
           </div>
 
-          {/* QR Code & URL Section */}
-          {status.active && activeUrl ? (
-            <div className="flex flex-col items-center gap-4 rounded-2xl border border-white/12 bg-black/35 p-5">
-              <div className="flex h-52 w-52 items-center justify-center overflow-hidden rounded-2xl border border-white/20 bg-white p-2.5 shadow-[0_12px_36px_rgba(0,0,0,0.45)]">
-                {qrDataUrl ? (
-                  <img
-                    src={qrDataUrl}
-                    alt={t.mobileLinkTitle}
-                    className="h-full w-full object-contain"
-                  />
-                ) : (
-                  <div className="h-8 w-8 animate-spin rounded-full border-2 border-neutral-300 border-t-neutral-900" />
-                )}
-              </div>
-
-              <p className="text-center text-xs leading-relaxed text-white/80">
-                {t.mobileLinkScanHint}
-              </p>
-
-              {/* Multi-NIC selector if more than one IP exists in this category */}
-              {activeUrls.length > 1 ? (
-                <div className="flex flex-wrap justify-center gap-1.5">
-                  {activeUrls.map((urlItem, idx) => {
-                    let hostLabel = urlItem;
-                    try {
-                      hostLabel = new URL(urlItem).host;
-                    } catch {
-                      // keep raw
-                    }
-                    const selected = idx === selectedUrlIndex;
-                    return (
-                      <button
-                        key={urlItem}
-                        type="button"
-                        onClick={() => {
-                          setSelectedUrlIndex(idx);
-                          setCopiedUrl(false);
-                        }}
-                        className={`rounded-full border px-2.5 py-1 font-mono text-[11px] transition-colors ${
-                          selected
-                            ? 'border-[var(--theme-accent)] bg-[var(--theme-accent-soft)] text-white'
-                            : 'border-white/12 bg-white/5 text-white/70 hover:text-white'
-                        }`}
-                      >
-                        {hostLabel}
-                      </button>
-                    );
-                  })}
-                </div>
-              ) : null}
-
-              {/* URL Preview + One-click Copy */}
-              <div className="flex w-full items-center gap-2 rounded-xl border border-white/12 bg-black/50 px-3 py-2">
-                <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-white/80 select-all">
-                  {activeUrl}
-                </span>
-                <button
-                  type="button"
-                  onClick={handleCopyUrl}
-                  className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-white/15 bg-white/10 px-2.5 py-1.5 text-[11px] font-semibold text-white transition-colors hover:bg-white/20"
-                >
-                  {copiedUrl ? (
+          {showPublicWifiAdvisory ? (
+            <div
+              role="status"
+              className="space-y-2.5 rounded-2xl border border-amber-400/30 bg-amber-500/[0.1] px-4 py-3 text-xs leading-relaxed text-amber-100/95 shadow-[inset_0_1px_0_rgba(255,255,255,0.14)] backdrop-blur-md"
+            >
+              <div className="flex items-start gap-2.5">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-300" />
+                <p>
+                  {language === 'es' ? (
                     <>
-                      <Check className="h-3.5 w-3.5 text-emerald-300" />
-                      <span className="text-emerald-200">{t.mobileLinkCopied}</span>
+                      ¿En Wi-Fi público o externo? Rotar el token no
+                      desbloqueará la conexión: los routers públicos bloquean el
+                      tráfico entre dispositivos (AP Isolation) y dejan la red
+                      local sin cifrar. Usa{' '}
+                      <strong className="font-semibold text-white">
+                        Mesh VPN (Tailscale / ZeroTier)
+                      </strong>{' '}
+                      para proteger tu sesión en un túnel cifrado.
                     </>
                   ) : (
                     <>
-                      <Copy className="h-3.5 w-3.5 text-[var(--theme-accent)]" />
-                      <span>{t.mobileLinkCopyUrl}</span>
+                      On public or external Wi-Fi? Rotating the token won&apos;t
+                      bypass router restrictions: public routers block
+                      device-to-device traffic (AP Isolation) and leave local
+                      traffic unencrypted. Switch to{' '}
+                      <strong className="font-semibold text-white">
+                        Mesh VPN (Tailscale / ZeroTier)
+                      </strong>{' '}
+                      for a private encrypted tunnel.
                     </>
                   )}
+                </p>
+              </div>
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNetworkTab('tailscale');
+                    setSelectedUrlIndex(0);
+                    setCopiedUrl(false);
+                    setRotateCount(0);
+                  }}
+                  className="inline-flex h-8 items-center gap-1.5 rounded-full border border-amber-300/35 bg-amber-400/15 px-3.5 text-[11px] font-semibold text-amber-50 transition-colors hover:border-amber-300/60 hover:bg-amber-400/25"
+                >
+                  <Globe className="h-3.5 w-3.5 text-amber-200" />
+                  <span>{t.mobileLinkSwitchToMeshVpn}</span>
                 </button>
               </div>
             </div>
-          ) : (
-            <div className="rounded-2xl border border-white/10 bg-black/30 px-4 py-8 text-center text-xs leading-relaxed text-[var(--theme-muted)]">
-              {!status.active
-                ? t.mobileLinkStatusStopped
-                : networkTab === 'lan'
-                  ? t.mobileLinkNoUrlsLan
-                  : t.mobileLinkNoUrlsTailscale}
-            </div>
-          )}
+          ) : null}
+
+          {/* QR Code & URL Section (fixed minimum height to prevent vertical tab jump) */}
+          <div className="flex min-h-[300px] flex-col justify-between rounded-2xl border border-white/12 bg-black/35 p-5">
+            {status.active && activeUrl ? (
+              <>
+                <div className="flex flex-col items-center gap-3.5">
+                  <div className="flex h-52 w-52 items-center justify-center overflow-hidden rounded-2xl border border-white/20 bg-white p-2.5 shadow-[0_12px_36px_rgba(0,0,0,0.45)]">
+                    {qrDataUrl ? (
+                      <img
+                        src={qrDataUrl}
+                        alt={t.mobileLinkTitle}
+                        className="h-full w-full object-contain"
+                      />
+                    ) : (
+                      <div className="h-8 w-8 animate-spin rounded-full border-2 border-neutral-300 border-t-neutral-900" />
+                    )}
+                  </div>
+
+                  <p className="text-center text-xs leading-relaxed text-white/80">
+                    {t.mobileLinkScanHint}
+                  </p>
+
+                  {/* Multi-NIC selector if more than one IP exists in this category */}
+                  {activeUrls.length > 1 ? (
+                    <div className="flex flex-wrap justify-center gap-1.5">
+                      {activeUrls.map((urlItem, idx) => {
+                        let hostLabel = urlItem;
+                        try {
+                          hostLabel = new URL(urlItem).host;
+                        } catch {
+                          // keep raw
+                        }
+                        const selected = idx === selectedUrlIndex;
+                        return (
+                          <button
+                            key={urlItem}
+                            type="button"
+                            onClick={() => {
+                              setSelectedUrlIndex(idx);
+                              setCopiedUrl(false);
+                            }}
+                            className={`rounded-full border px-2.5 py-1 font-mono text-[11px] transition-colors ${
+                              selected
+                                ? 'border-[var(--theme-accent)] bg-[var(--theme-accent-soft)] text-white'
+                                : 'border-white/12 bg-white/5 text-white/70 hover:text-white'
+                            }`}
+                          >
+                            {hostLabel}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : null}
+                </div>
+
+                {/* URL Preview + One-click Copy + External Wi-Fi Hint */}
+                <div className="mt-4 space-y-2">
+                  <div className="flex w-full items-center gap-2 rounded-xl border border-white/12 bg-black/50 px-3 py-2">
+                    <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-white/80 select-all">
+                      {activeUrl}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleCopyUrl}
+                      className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-white/15 bg-white/10 px-2.5 py-1.5 text-[11px] font-semibold text-white transition-colors hover:bg-white/20"
+                    >
+                      {copiedUrl ? (
+                        <>
+                          <Check className="h-3.5 w-3.5 text-emerald-300" />
+                          <span className="text-emerald-200">{t.mobileLinkCopied}</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="h-3.5 w-3.5 text-[var(--theme-accent)]" />
+                          <span>{t.mobileLinkCopyUrl}</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  {networkTab === 'lan' ? (
+                    <p className="w-full text-center text-[11px] leading-snug text-white/55">
+                      {t.mobileLinkLanExternalHint}
+                    </p>
+                  ) : null}
+                </div>
+              </>
+            ) : (
+              <div className="flex flex-1 flex-col items-center justify-center gap-4 px-2 py-6 text-center">
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-white/15 bg-white/[0.06] text-[var(--theme-accent)] shadow-[inset_0_1px_0_rgba(255,255,255,0.14)]">
+                  {networkTab === 'tailscale' ? (
+                    <Globe className="h-5 w-5" />
+                  ) : (
+                    <Wifi className="h-5 w-5" />
+                  )}
+                </div>
+
+                <p className="max-w-sm text-xs leading-relaxed text-white/75">
+                  {!status.active
+                    ? t.mobileLinkStatusStopped
+                    : networkTab === 'tailscale'
+                      ? t.mobileLinkTailscaleOfflineCard
+                      : t.mobileLinkNoUrlsLan}
+                </p>
+
+                {status.active ? (
+                  <button
+                    type="button"
+                    onClick={handleRescanNetwork}
+                    disabled={isRescanning}
+                    className="inline-flex h-9 items-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 text-xs font-semibold text-white transition-colors hover:border-white/30 hover:bg-white/15 disabled:opacity-55"
+                  >
+                    <RefreshCw
+                      className={`h-3.5 w-3.5 text-[var(--theme-accent)] ${
+                        isRescanning ? 'animate-spin' : ''
+                      }`}
+                    />
+                    <span>
+                      {isRescanning
+                        ? t.mobileLinkRescanning
+                        : t.mobileLinkRescanNetwork}
+                    </span>
+                  </button>
+                ) : null}
+              </div>
+            )}
+          </div>
 
           {/* Ephemeral Security Guarantee Badge */}
           <div className="flex items-start gap-2.5 rounded-2xl border border-emerald-400/20 bg-emerald-500/[0.08] px-3.5 py-2.5 text-[11px] leading-relaxed text-emerald-100/90">

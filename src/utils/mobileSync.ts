@@ -9,8 +9,57 @@ import type {
 import { sanitizeImageUrl } from './imageUpload';
 
 export const MOBILE_LINK_TOKEN_SESSION_KEY = 'atrium.mobileLink.token.v1';
+export const MOBILE_LINK_DEVICE_ID_KEY = 'atrium_ml_device_id';
 
 let mobileLinkClientActive = false;
+let ephemeralDeviceIdFallback: string | null = null;
+
+function generateDeviceUuid(): string {
+  if (
+    typeof crypto !== 'undefined' &&
+    typeof crypto.randomUUID === 'function'
+  ) {
+    return crypto.randomUUID();
+  }
+  if (
+    typeof crypto !== 'undefined' &&
+    typeof crypto.getRandomValues === 'function'
+  ) {
+    const bytes = new Uint8Array(16);
+    crypto.getRandomValues(bytes);
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join(
+      ''
+    );
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+  }
+  return `ml-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+export function getMobileLinkDeviceId(): string {
+  if (typeof window === 'undefined') return 'server';
+  try {
+    const existing = window.sessionStorage.getItem(MOBILE_LINK_DEVICE_ID_KEY);
+    if (existing && existing.trim()) {
+      return existing.trim();
+    }
+    const created = generateDeviceUuid();
+    window.sessionStorage.setItem(MOBILE_LINK_DEVICE_ID_KEY, created);
+    return created;
+  } catch {
+    if (!ephemeralDeviceIdFallback) {
+      ephemeralDeviceIdFallback = generateDeviceUuid();
+    }
+    return ephemeralDeviceIdFallback;
+  }
+}
+
+export function getMobileLinkEventsUrl(): string {
+  return `/api/mobile-link/events?deviceId=${encodeURIComponent(
+    getMobileLinkDeviceId()
+  )}`;
+}
 
 export function setMobileLinkClientActive(active: boolean): void {
   mobileLinkClientActive = Boolean(active);
@@ -481,7 +530,11 @@ export async function fetchMobileSyncState(
     headers['X-Atrium-Link-Token'] = resolvedToken;
   }
 
-  const endpoint = `${baseOrigin.replace(/\/+$/, '')}/mobile-sync/state`;
+  const deviceQuery =
+    !baseOrigin || isMobileLinkClient()
+      ? `?deviceId=${encodeURIComponent(getMobileLinkDeviceId())}`
+      : '';
+  const endpoint = `${baseOrigin.replace(/\/+$/, '')}/mobile-sync/state${deviceQuery}`;
   const response = await fetch(endpoint, {
     method: 'GET',
     credentials: 'same-origin',
@@ -539,7 +592,11 @@ export async function postMobileSyncState(
     headers['X-Atrium-Link-Token'] = resolvedToken;
   }
 
-  const endpoint = `${baseOrigin.replace(/\/+$/, '')}/mobile-sync/state`;
+  const deviceQuery =
+    !baseOrigin || isMobileLinkClient()
+      ? `?deviceId=${encodeURIComponent(getMobileLinkDeviceId())}`
+      : '';
+  const endpoint = `${baseOrigin.replace(/\/+$/, '')}/mobile-sync/state${deviceQuery}`;
   const response = await fetch(endpoint, {
     method: 'POST',
     credentials: 'same-origin',

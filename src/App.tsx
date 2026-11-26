@@ -1,3 +1,6 @@
+import React from 'react';
+import { LandingShell } from './components/LandingShell';
+import { isWebEdition } from './utils/webEnvironment';
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
@@ -12,8 +15,6 @@ import { ChatWindow } from './components/ChatWindow';
 import { GrandIntroSplash } from './components/GrandIntroSplash';
 import { ImageLightbox } from './components/ImageLightbox';
 import { IntroSplash } from './components/IntroSplash';
-import { LandingShell } from './components/LandingShell';
-import { SocialPreviewBanner } from './components/SocialPreviewBanner';
 import { MobileLinkModal } from './components/MobileLinkModal';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { OllamaSetupHelper } from './components/OllamaSetupHelper';
@@ -51,6 +52,7 @@ import {
   computeMobileSyncSignature,
   computeMobileSyncStateHash,
   fetchMobileSyncState,
+  getMobileLinkEventsUrl,
   isLocalLoopbackUrl,
   isPublicHttpsApiUrl,
   postMobileSyncState,
@@ -60,9 +62,7 @@ import {
 import {
   DEFAULT_OLLAMA_URL,
   DEFAULT_OPENAI_URL,
-  DEMO_MODEL_ID,
   fetchProviderModels,
-  shouldUseWebDemoEngine,
   streamProviderChat,
   summarizeConversationMemory,
 } from './utils/ollama';
@@ -79,7 +79,6 @@ import {
   saveMobileSyncUpdatedAt,
   stripSecretFromSettings,
 } from './utils/storage';
-import { isWebEdition } from './utils/webEnvironment';
 
 function buildSystemPromptWithPersona(
   baseSystemPrompt: string,
@@ -172,6 +171,10 @@ const EMPTY_MOBILE_LINK_STATUS: MobileLinkStatus = {
   port: null,
   token: null,
   urls: { lan: [], tailscale: [] },
+  lanUrl: null,
+  vpnUrl: null,
+  vpnProvider: null,
+  vpnProviders: [],
   connectedClients: 0,
   lastSyncAt: null,
 };
@@ -199,6 +202,8 @@ function resolveInitialIntroMode(): 'grand' | 'quick' {
 }
 
 export default function App() {
+  const [showLanding, setShowLanding] = React.useState(() => isWebEdition() && !new URLSearchParams(window.location.search).has('app'));
+  if (showLanding) return <LandingShell onEnterApp={() => setShowLanding(false)} />;
   const [characters, setCharacters] = useState<Character[]>(DEFAULT_CHARACTERS);
   const [activeCharacterId, setActiveCharacterId] = useState<string>(
     DEFAULT_CHARACTERS[0].id
@@ -269,24 +274,12 @@ export default function App() {
         initialMobileLinkSession.hadUrlToken || initialMobileLinkSession.token
       )
   );
-  const [showSocialPreview] = useState<boolean>(() => {
-    if (isElectronHost || typeof window === 'undefined') return false;
-    return new URLSearchParams(window.location.search).get('social-preview') === '1';
-  });
-  const [showWebLanding, setShowWebLanding] = useState<boolean>(() =>
-    isWebEdition()
-  );
   const [mobileLinkStatus, setMobileLinkStatus] = useState<MobileLinkStatus>(
     EMPTY_MOBILE_LINK_STATUS
   );
   const [isMobileLinkModalOpen, setIsMobileLinkModalOpen] = useState(false);
 
   const t = TRANSLATIONS[language];
-  const isWebDemoMode = shouldUseWebDemoEngine(
-    settings.provider,
-    settings.baseUrl,
-    settings.apiKey
-  );
 
   const abortControllerRef = useRef<AbortController | null>(null);
   const charactersRef = useRef(characters);
@@ -1313,6 +1306,88 @@ export default function App() {
     streamingCharacterId,
   ]);
 
+  // Persistent SSE connection for Mobile Link clients (exact physical device tracking + instant sync notifications)
+  useEffect(() => {
+    if (
+      !isStorageReady ||
+      !isMobileLinkClient ||
+      isElectronHost ||
+      typeof EventSource === 'undefined'
+    ) {
+      return;
+    }
+
+    const eventSource = new EventSource(getMobileLinkEventsUrl());
+
+    const handleRemoteSyncEvent = (event: MessageEvent<string>) => {
+      if (
+        document.visibilityState === 'hidden' ||
+        streamingCharIdRef.current !== null ||
+        isSyncRequestInFlightRef.current
+      ) {
+        return;
+      }
+
+      let remoteUpdatedAt = 0;
+      try {
+        const parsed = JSON.parse(event.data) as { updatedAt?: number };
+        if (typeof parsed?.updatedAt === 'number') {
+          remoteUpdatedAt = parsed.updatedAt;
+        }
+      } catch {
+        return;
+      }
+
+      if (remoteUpdatedAt <= syncUpdatedAtRef.current) {
+        return;
+      }
+
+      isSyncRequestInFlightRef.current = true;
+      void fetchMobileSyncState('')
+        .then((remote) => {
+          if (!remote || streamingCharIdRef.current !== null) {
+            return;
+          }
+          if (remote.updatedAt <= syncUpdatedAtRef.current) {
+            return;
+          }
+          const remoteSig = computeMobileSyncSignature(remote);
+          if (remoteSig === lastAppliedRemoteSignatureRef.current) {
+            return;
+          }
+          const normalizedRemoteJson = serializeNormalizedSyncPayload(remote);
+          if (
+            lastAppliedPayloadRef.current &&
+            normalizedRemoteJson === lastAppliedPayloadRef.current
+          ) {
+            lastAppliedRemoteSignatureRef.current = remoteSig;
+            syncUpdatedAtRef.current = remote.updatedAt;
+            return;
+          }
+          applyRemoteSyncSnapshot(remote, true);
+        })
+        .catch(() => {
+          // Ignore transient SSE-triggered fetch errors; polling handles recovery
+        })
+        .finally(() => {
+          isSyncRequestInFlightRef.current = false;
+        });
+    };
+
+    eventSource.addEventListener(
+      'sync',
+      handleRemoteSyncEvent as EventListener
+    );
+
+    return () => {
+      eventSource.removeEventListener(
+        'sync',
+        handleRemoteSyncEvent as EventListener
+      );
+      eventSource.close();
+    };
+  }, [applyRemoteSyncSnapshot, isElectronHost, isMobileLinkClient, isStorageReady]);
+
   const streamAssistantReply = useCallback(
     async (targetCharacter: Character, baseHistory: ChatMessage[]) => {
       const activeProvider = settings.provider ?? 'ollama';
@@ -1373,13 +1448,6 @@ export default function App() {
           temperature: settings.temperature,
           numPredict: settings.numPredict,
           numCtx: settings.numCtx,
-          characterContext: {
-            name: targetCharacter.name,
-            role: targetCharacter.role,
-            bio: targetCharacter.bio,
-            systemPrompt: targetCharacter.systemPrompt,
-          },
-          language,
           signal: controller.signal,
           onToken: (token) => {
             setConversations((prev) => {
@@ -1482,7 +1550,7 @@ export default function App() {
         });
       }
     },
-    [language, settings, storyMemories, userPersona, t]
+    [settings, storyMemories, userPersona, t]
   );
 
   const handleSelectCharacter = useCallback(
@@ -1533,11 +1601,7 @@ export default function App() {
   const handleSendMessage = useCallback(
     async (content: string) => {
       const activeProvider = settings.provider ?? 'ollama';
-      if (
-        !isWebDemoMode &&
-        activeProvider === 'ollama' &&
-        ollamaStatus === 'offline'
-      ) {
+      if (activeProvider === 'ollama' && ollamaStatus === 'offline') {
         setShowOllamaSetupHelper(true);
         return;
       }
@@ -1578,7 +1642,6 @@ export default function App() {
     [
       activeCharacter,
       conversations,
-      isWebDemoMode,
       ollamaStatus,
       settings.provider,
       settings.selectedModel,
@@ -1590,11 +1653,7 @@ export default function App() {
 
   const handleRegenerateLastResponse = useCallback(async () => {
     const activeProvider = settings.provider ?? 'ollama';
-    if (
-      !isWebDemoMode &&
-      activeProvider === 'ollama' &&
-      ollamaStatus === 'offline'
-    ) {
+    if (activeProvider === 'ollama' && ollamaStatus === 'offline') {
       setShowOllamaSetupHelper(true);
       return;
     }
@@ -1696,13 +1755,6 @@ export default function App() {
         temperature: settings.temperature,
         numPredict: settings.numPredict,
         numCtx: settings.numCtx,
-        characterContext: {
-          name: targetCharacter.name,
-          role: targetCharacter.role,
-          bio: targetCharacter.bio,
-          systemPrompt: targetCharacter.systemPrompt,
-        },
-        language,
         signal: controller.signal,
         onToken: (token) => {
           accumulated += token;
@@ -1855,8 +1907,6 @@ export default function App() {
   }, [
     activeCharacter,
     conversations,
-    isWebDemoMode,
-    language,
     ollamaStatus,
     settings,
     stopStreaming,
@@ -1868,11 +1918,7 @@ export default function App() {
 
   const handleContinueLastResponse = useCallback(async () => {
     const activeProvider = settings.provider ?? 'ollama';
-    if (
-      !isWebDemoMode &&
-      activeProvider === 'ollama' &&
-      ollamaStatus === 'offline'
-    ) {
+    if (activeProvider === 'ollama' && ollamaStatus === 'offline') {
       setShowOllamaSetupHelper(true);
       return;
     }
@@ -1975,14 +2021,6 @@ export default function App() {
         temperature: settings.temperature,
         numPredict: settings.numPredict,
         numCtx: settings.numCtx,
-        characterContext: {
-          name: targetCharacter.name,
-          role: targetCharacter.role,
-          bio: targetCharacter.bio,
-          systemPrompt: targetCharacter.systemPrompt,
-        },
-        isContinue: true,
-        language,
         signal: controller.signal,
         onToken: (token) => {
           if (!token) return;
@@ -2501,24 +2539,12 @@ export default function App() {
     [settings.apiKey, settings.baseUrl, settings.openaiBaseUrl, stopStreaming, streamingCharacterId]
   );
 
-  if (showSocialPreview) {
-    return <SocialPreviewBanner />;
-  }
-
-  if (showWebLanding) {
-    return <LandingShell onEnterApp={() => setShowWebLanding(false)} />;
-  }
-
-  const webEditionActive = isWebEdition();
-  const showWebOverviewBar = webEditionActive && activeWorld === 'lobby';
-
-  const workspaceContent = (
-    <div
-      style={themeStyle}
-      className={`m-0 flex w-screen overflow-hidden bg-[var(--theme-bg)] p-0 text-[var(--theme-text)] transition-colors duration-300 ${
-        showWebOverviewBar ? 'min-h-0 flex-1' : 'h-[100dvh]'
-      }`}
-    >
+  return (
+    <MotionConfig reducedMotion="user">
+      <div
+        style={themeStyle}
+        className="m-0 flex h-dvh w-screen overflow-hidden bg-[var(--theme-bg)] p-0 text-[var(--theme-text)] transition-colors duration-300"
+      >
         <AnimatePresence mode="wait">
           {activeWorld === 'lobby' ? (
             <motion.div
@@ -2578,13 +2604,11 @@ export default function App() {
             >
               <AtriumLobby
                 t={t}
-                language={language}
                 characters={characters}
                 activeCharacterId={activeCharacter.id}
                 selectedModel={settings.selectedModel}
                 provider={settings.provider ?? 'ollama'}
                 ollamaStatus={ollamaStatus}
-                isWebDemo={isWebDemoMode}
                 introDone={introMode !== 'quick'}
                 userPersona={userPersona}
                 messageCounts={messageCounts}
@@ -2639,7 +2663,6 @@ export default function App() {
                 selectedModel={settings.selectedModel}
                 ollamaUrl={settings.baseUrl}
                 provider={settings.provider ?? 'ollama'}
-                isWebDemo={isWebDemoMode}
                 userPersona={userPersona}
                 wallpaperFit={wallpaperFit}
                 parallaxEnabled={parallaxEnabled}
@@ -2691,50 +2714,19 @@ export default function App() {
           onChangeLanguage={setLanguage}
           onClose={() => setIsSettingsOpen(false)}
           onSave={(next, nextPersona) => {
-            const nextDemoMode = shouldUseWebDemoEngine(
-              next.provider,
-              next.baseUrl,
-              next.apiKey
-            );
-            const normalizedNext =
-              nextDemoMode && !next.selectedModel.trim()
-                ? {
-                    ...next,
-                    selectedModel: DEMO_MODEL_ID,
-                    availableModels:
-                      next.availableModels.length > 0
-                        ? next.availableModels
-                        : [
-                            {
-                              name: DEMO_MODEL_ID,
-                              model: DEMO_MODEL_ID,
-                              details: {
-                                parameter_size: '8B',
-                                family: 'Atrium Web Sim',
-                              },
-                            },
-                          ],
-                  }
-                : next;
-            setSettings(normalizedNext);
+            setSettings(next);
             setUserPersona(nextPersona);
             setErrorMessage(null);
-            if (nextDemoMode) {
-              setOllamaStatus('connected');
-            } else if ((normalizedNext.provider ?? 'ollama') === 'openai') {
+            if ((next.provider ?? 'ollama') === 'openai') {
               setOllamaStatus(
-                normalizedNext.selectedModel.trim() ||
-                  normalizedNext.availableModels.length > 0
+                next.selectedModel.trim() || next.availableModels.length > 0
                   ? 'connected'
                   : 'offline'
               );
-            } else if (normalizedNext.availableModels.length > 0) {
+            } else if (next.availableModels.length > 0) {
               setOllamaStatus('connected');
             }
-            pushSyncStateNow({
-              settings: normalizedNext,
-              userPersona: nextPersona,
-            });
+            pushSyncStateNow({ settings: next, userPersona: nextPersona });
           }}
           onExportBackup={handleExportBackup}
           onImportBackup={handleImportBackup}
@@ -2859,29 +2851,6 @@ export default function App() {
           ) : null}
         </AnimatePresence>
       </div>
-  );
-
-  return (
-    <MotionConfig reducedMotion="user">
-      {showWebOverviewBar ? (
-        <div className="flex h-[100dvh] w-screen flex-col overflow-hidden bg-[#050507]">
-          <div className="flex h-9 w-full shrink-0 items-center justify-between border-b border-white/10 bg-black/90 px-4 text-xs text-zinc-400">
-            <button
-              type="button"
-              onClick={() => setShowWebLanding(true)}
-              className="cursor-pointer whitespace-nowrap transition hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-400"
-            >
-              ← Atrium Overview
-            </button>
-            <span className="inline-flex items-center truncate rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-0.5 text-[11px] whitespace-nowrap text-zinc-300">
-              Interactive Web Demo • No Install Required
-            </span>
-          </div>
-          {workspaceContent}
-        </div>
-      ) : (
-        workspaceContent
-      )}
     </MotionConfig>
   );
 }

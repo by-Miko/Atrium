@@ -1,7 +1,7 @@
 {
   "name": "atrium-studio",
   "private": true,
-  "version": "1.5.0",
+  "version": "1.5.1",
   "description": "Privacy-first Liquid Glass roleplay chat studio for Ollama and OpenAI-compatible APIs.",
   "author": "Miko",
   "license": "MIT",

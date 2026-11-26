@@ -261,7 +261,6 @@ export interface UIStrings {
   ollamaStatusOffline: string;
   apiStatusReady: string;
   apiStatusSetup: string;
-  webDemoStatusReady: string;
   cancel: string;
   saveSettings: string;
   noModelsInstalledMsg: string;
@@ -312,6 +311,8 @@ export interface UIStrings {
   mobileLinkToggleLabel: string;
   mobileLinkLanTab: string;
   mobileLinkTailscaleTab: string;
+  mobileLinkMeshVpnOfflineSub: string;
+  mobileLinkSwitchToMeshVpn: string;
   mobileLinkCopyUrl: string;
   mobileLinkCopied: string;
   mobileLinkNoUrlsLan: string;
@@ -324,6 +325,10 @@ export interface UIStrings {
   mobileLinkStartError: string;
   mobileLinkRefreshToken: string;
   mobileLinkScanHint: string;
+  mobileLinkRescanNetwork: string;
+  mobileLinkRescanning: string;
+  mobileLinkTailscaleOfflineCard: string;
+  mobileLinkLanExternalHint: string;
   themes: Record<ThemeId, { name: string; subtitle: string }>;
   bubbleSchemes: Record<BubbleSchemeId, { name: string; subtitle: string }>;
 }
@@ -630,14 +635,13 @@ export const TRANSLATIONS: Record<Language, UIStrings> = {
     outroSessionSaved: 'Session saved locally in Atrium',
     outroCraftedBy: 'Crafted by Miko',
     reopenAtrium: 'Reopen Atrium',
-    appVersion: 'v1.5.0 (Hardened)',
+    appVersion: 'v1.5.1 (Hardened)',
     settingsWatermark: 'Atrium Engine • Original Architecture by Miko',
     ollamaStatusChecking: 'Ollama...',
     ollamaStatusReady: 'Ollama Ready',
     ollamaStatusOffline: 'Ollama Offline · Setup',
     apiStatusReady: 'API Ready',
     apiStatusSetup: 'API · Select Model',
-    webDemoStatusReady: 'Web Demo • Live Sim',
     cancel: 'Cancel',
     saveSettings: 'Save Settings',
     noModelsInstalledMsg:
@@ -738,13 +742,15 @@ export const TRANSLATIONS: Record<Language, UIStrings> = {
     mobileLinkStatusStopped: 'Bridge Stopped',
     mobileLinkToggleLabel: 'Mobile Link Server',
     mobileLinkLanTab: 'Wi-Fi LAN',
-    mobileLinkTailscaleTab: 'Tailscale VPN',
+    mobileLinkTailscaleTab: 'Mesh VPN',
+    mobileLinkMeshVpnOfflineSub: 'Tailscale / ZeroTier',
+    mobileLinkSwitchToMeshVpn: 'Switch to Mesh VPN',
     mobileLinkCopyUrl: 'Copy URL',
     mobileLinkCopied: 'Copied!',
     mobileLinkNoUrlsLan:
       'No private Wi-Fi/LAN IPv4 address detected on this PC.',
     mobileLinkNoUrlsTailscale:
-      'No Tailscale (100.*) interface detected. Connect Tailscale for remote access outside home Wi-Fi.',
+      'No Mesh VPN tunnel detected. Connect Tailscale, ZeroTier, NetBird, or WireGuard for remote access outside home Wi-Fi.',
     mobileLinkSecurityBadge:
       'Ephemeral 24-byte session token · HttpOnly cookie · DPAPI API keys stay on this PC',
     mobileLinkConnectedClients: (count) =>
@@ -756,6 +762,12 @@ export const TRANSLATIONS: Record<Language, UIStrings> = {
     mobileLinkRefreshToken: 'Rotate Token',
     mobileLinkScanHint:
       'Scan with your phone camera to open Atrium and install as a PWA.',
+    mobileLinkRescanNetwork: 'Rescan Network',
+    mobileLinkRescanning: 'Scanning...',
+    mobileLinkTailscaleOfflineCard:
+      'No Mesh VPN tunnel is active on this PC. Turn on Tailscale, ZeroTier, NetBird, or WireGuard on your PC and phone to connect from any external network.',
+    mobileLinkLanExternalHint:
+      'External or public Wi-Fi routers often block device connections (AP Isolation / Windows Public Firewall). Use Mesh VPN away from home.',
   },
   es: {
     appTitle: 'Atrium',
@@ -1059,14 +1071,13 @@ export const TRANSLATIONS: Record<Language, UIStrings> = {
     outroSessionSaved: 'Sesión guardada localmente en Atrium',
     outroCraftedBy: 'Crafted by Miko',
     reopenAtrium: 'Reabrir Atrium',
-    appVersion: 'v1.5.0 (Hardened)',
+    appVersion: 'v1.5.1 (Hardened)',
     settingsWatermark: 'Atrium Engine • Original Architecture by Miko',
     ollamaStatusChecking: 'Ollama...',
     ollamaStatusReady: 'Ollama Listo',
     ollamaStatusOffline: 'Ollama Offline · Configurar',
     apiStatusReady: 'API Lista',
     apiStatusSetup: 'API · Elegir Modelo',
-    webDemoStatusReady: 'Demo Web • Simulación en Vivo',
     cancel: 'Cancelar',
     saveSettings: 'Guardar Ajustes',
     noModelsInstalledMsg:
@@ -1167,13 +1178,15 @@ export const TRANSLATIONS: Record<Language, UIStrings> = {
     mobileLinkStatusStopped: 'Puente Detenido',
     mobileLinkToggleLabel: 'Servidor Mobile Link',
     mobileLinkLanTab: 'Wi-Fi LAN',
-    mobileLinkTailscaleTab: 'Tailscale VPN',
+    mobileLinkTailscaleTab: 'Mesh VPN',
+    mobileLinkMeshVpnOfflineSub: 'Tailscale / ZeroTier',
+    mobileLinkSwitchToMeshVpn: 'Cambiar a Mesh VPN',
     mobileLinkCopyUrl: 'Copiar URL',
     mobileLinkCopied: '¡Copiado!',
     mobileLinkNoUrlsLan:
       'No se detectó una IP IPv4 privada de Wi-Fi/LAN en esta PC.',
     mobileLinkNoUrlsTailscale:
-      'No se detectó interfaz Tailscale (100.*). Conecta Tailscale para acceder fuera de tu Wi-Fi.',
+      'No se detectó túnel Mesh VPN. Conecta Tailscale, ZeroTier, NetBird o WireGuard para acceder fuera de tu Wi-Fi.',
     mobileLinkSecurityBadge:
       'Token efímero de 24 bytes · Cookie HttpOnly · Claves DPAPI aisladas en esta PC',
     mobileLinkConnectedClients: (count) =>
@@ -1185,5 +1198,11 @@ export const TRANSLATIONS: Record<Language, UIStrings> = {
     mobileLinkRefreshToken: 'Rotar Token',
     mobileLinkScanHint:
       'Escanea con la cámara de tu teléfono para abrir Atrium e instalarla como PWA.',
+    mobileLinkRescanNetwork: 'Re-escanear red',
+    mobileLinkRescanning: 'Escaneando...',
+    mobileLinkTailscaleOfflineCard:
+      'No hay ningún túnel Mesh VPN activo en esta PC. Enciende Tailscale, ZeroTier, NetBird o WireGuard en tu PC y en tu teléfono para conectar desde cualquier red externa.',
+    mobileLinkLanExternalHint:
+      'El Wi-Fi público o externo suele bloquear conexiones entre dispositivos (AP Isolation / Firewall). Usa Mesh VPN fuera de casa.',
   },
 };

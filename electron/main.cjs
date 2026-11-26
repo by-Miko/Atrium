@@ -32,6 +32,7 @@ const mobileLinkState = {
   token: null,
   sockets: new Set(),
   sessions: new Map(),
+  sseClients: new Map(),
   lastSyncAt: null,
   startPromise: null,
 };
@@ -598,12 +599,6 @@ function isMobileLinkRequestAuthenticated(req) {
     typeof headerToken === 'string' &&
     timingSafeVerifyToken(headerToken.trim(), mobileLinkState.token)
   ) {
-    const clientKey = `token:${req.socket?.remoteAddress || 'client'}`;
-    mobileLinkState.sessions.set(clientKey, {
-      createdAt:
-        mobileLinkState.sessions.get(clientKey)?.createdAt ?? Date.now(),
-      lastSeenAt: Date.now(),
-    });
     return true;
   }
 
@@ -620,6 +615,122 @@ function isMobileLinkRequestAuthenticated(req) {
   }
 
   return false;
+}
+
+function resolveMobileDeviceKey(req, parsedUrl) {
+  const rawDeviceId = parsedUrl?.searchParams?.get('deviceId');
+  if (typeof rawDeviceId === 'string') {
+    const trimmed = rawDeviceId.trim();
+    if (/^[a-zA-Z0-9_-]{4,128}$/.test(trimmed)) {
+      return `device:${trimmed}`;
+    }
+  }
+  return `ip:${req.socket?.remoteAddress || 'unknown'}`;
+}
+
+function broadcastMobileLinkEvent(eventName, data) {
+  if (!mobileLinkState.active || mobileLinkState.sseClients.size === 0) {
+    return;
+  }
+  const payload = `event: ${eventName}\ndata: ${JSON.stringify(data)}\n\n`;
+  for (const clientSet of mobileLinkState.sseClients.values()) {
+    for (const clientRes of clientSet) {
+      if (!clientRes.writableEnded && !clientRes.destroyed) {
+        try {
+          clientRes.write(payload);
+        } catch {
+          // broken SSE responses are cleaned up by close/error handlers
+        }
+      }
+    }
+  }
+}
+
+function handleMobileLinkEvents(req, res, parsedUrl) {
+  if (req.method !== 'GET') {
+    sendJsonResponse(res, 405, { error: 'Method not allowed' });
+    return;
+  }
+  if (!isMobileLinkRequestAuthenticated(req)) {
+    sendJsonResponse(res, 401, { error: 'Unauthorized' });
+    return;
+  }
+
+  const deviceKey = resolveMobileDeviceKey(req, parsedUrl);
+  let clientSet = mobileLinkState.sseClients.get(deviceKey);
+  if (!clientSet) {
+    clientSet = new Set();
+    mobileLinkState.sseClients.set(deviceKey, clientSet);
+  }
+  clientSet.add(res);
+
+  req.socket?.setTimeout?.(0);
+  req.socket?.setNoDelay?.(true);
+
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream; charset=utf-8',
+    'Cache-Control': 'no-cache, no-transform',
+    Connection: 'keep-alive',
+    'X-Accel-Buffering': 'no',
+    'X-Content-Type-Options': 'nosniff',
+  });
+  res.flushHeaders?.();
+  res.write(
+    `event: connected\ndata: ${JSON.stringify({
+      updatedAt: mobileSyncSnapshot.updatedAt,
+    })}\n\n`
+  );
+
+  const heartbeatTimer = setInterval(() => {
+    if (res.writableEnded || res.destroyed) return;
+    try {
+      res.write(': keepalive\n\n');
+    } catch {
+      cleanup();
+    }
+  }, 25000);
+
+  let cleaned = false;
+  const cleanup = () => {
+    if (cleaned) return;
+    cleaned = true;
+    clearInterval(heartbeatTimer);
+    const activeSet = mobileLinkState.sseClients.get(deviceKey);
+    if (activeSet) {
+      activeSet.delete(res);
+      if (activeSet.size === 0) {
+        mobileLinkState.sseClients.delete(deviceKey);
+      }
+    }
+  };
+
+  req.on('aborted', cleanup);
+  req.on('close', cleanup);
+  res.on('close', cleanup);
+  res.on('error', cleanup);
+}
+
+function handleMobileLinkInfo(req, res) {
+  if (req.method !== 'GET') {
+    sendJsonResponse(res, 405, { error: 'Method not allowed' });
+    return;
+  }
+  if (!isMobileLinkRequestAuthenticated(req)) {
+    sendJsonResponse(res, 401, { error: 'Unauthorized' });
+    return;
+  }
+  const status = getMobileLinkStatusPayload();
+  sendJsonResponse(res, 200, {
+    active: status.active,
+    port: status.port,
+    lanUrl: status.lanUrl,
+    vpnUrl: status.vpnUrl,
+    vpnProvider: status.vpnProvider,
+    vpnProviders: status.vpnProviders,
+    urls: status.urls,
+    connectedClients: status.connectedClients,
+    lastSyncAt: status.lastSyncAt,
+  });
 }
 
 function sendJsonResponse(res, statusCode, payload, extraHeaders = {}) {
@@ -736,17 +847,58 @@ function buildSanitizedSyncSnapshot(raw) {
   };
 }
 
-function detectMobileLinkUrls(port, token) {
+function detectMeshVpnProvider(adapterName, octets) {
+  const name = typeof adapterName === 'string' ? adapterName.toLowerCase() : '';
+  if (
+    name.includes('netbird') ||
+    /(?:^|[^a-z0-9])wt\d*(?:$|[^a-z0-9])/i.test(name)
+  ) {
+    return 'NetBird';
+  }
+  if (
+    name.includes('zerotier') ||
+    /(?:^|[^a-z0-9])zt[a-z0-9_-]*(?:$|[^a-z0-9])/i.test(name)
+  ) {
+    return 'ZeroTier';
+  }
+  if (
+    name.includes('wireguard') ||
+    name.includes('amneziawg') ||
+    name.includes('wg-quick') ||
+    /(?:^|[^a-z0-9])wg\d*(?:$|[^a-z0-9])/i.test(name)
+  ) {
+    return 'WireGuard';
+  }
+  if (name.includes('tailscale')) {
+    return 'Tailscale';
+  }
+  // Tailscale / CGNAT 100.64.0.0/10 (100.64.x.x - 100.127.x.x)
+  if (octets[0] === 100 && octets[1] >= 64 && octets[1] <= 127) {
+    return 'Tailscale';
+  }
+  return null;
+}
+
+function getLocalNetworkAddresses(port, token) {
   const lan = [];
-  const tailscale = [];
+  const vpn = [];
+  const vpnProviders = [];
   if (!port || !token) {
-    return { lan, tailscale };
+    return {
+      lan,
+      tailscale: vpn,
+      vpn,
+      lanUrl: null,
+      vpnUrl: null,
+      vpnProvider: null,
+      vpnProviders,
+    };
   }
 
   const seenIps = new Set();
   const interfaces = os.networkInterfaces();
 
-  for (const entries of Object.values(interfaces)) {
+  for (const [adapterName, entries] of Object.entries(interfaces)) {
     if (!Array.isArray(entries)) continue;
     for (const iface of entries) {
       if (!iface || iface.internal) continue;
@@ -769,9 +921,13 @@ function detectMobileLinkUrls(port, token) {
 
       seenIps.add(ip);
       const url = `http://${ip}:${port}/?ml_token=${encodeURIComponent(token)}`;
+      const detectedProvider = detectMeshVpnProvider(adapterName, octets);
 
-      if (octets[0] === 100) {
-        tailscale.push(url);
+      if (detectedProvider) {
+        vpn.push(url);
+        if (!vpnProviders.includes(detectedProvider)) {
+          vpnProviders.push(detectedProvider);
+        }
       } else if (
         octets[0] === 10 ||
         (octets[0] === 192 && octets[1] === 168) ||
@@ -782,21 +938,42 @@ function detectMobileLinkUrls(port, token) {
     }
   }
 
-  return { lan, tailscale };
+  return {
+    lan,
+    tailscale: vpn,
+    vpn,
+    lanUrl: lan[0] ?? null,
+    vpnUrl: vpn[0] ?? null,
+    vpnProvider: vpnProviders[0] ?? null,
+    vpnProviders,
+  };
 }
 
 function getMobileLinkStatusPayload() {
   const active = Boolean(mobileLinkState.active && mobileLinkState.server);
   const port = active ? mobileLinkState.port : null;
   const token = active ? mobileLinkState.token : null;
+  const detected = active
+    ? getLocalNetworkAddresses(port, token)
+    : {
+        lan: [],
+        tailscale: [],
+        vpn: [],
+        lanUrl: null,
+        vpnUrl: null,
+        vpnProvider: null,
+        vpnProviders: [],
+      };
   return {
     active,
     port,
     token,
-    urls: active
-      ? detectMobileLinkUrls(port, token)
-      : { lan: [], tailscale: [] },
-    connectedClients: active ? mobileLinkState.sessions.size : 0,
+    urls: { lan: detected.lan, tailscale: detected.tailscale },
+    lanUrl: detected.lanUrl,
+    vpnUrl: detected.vpnUrl,
+    vpnProvider: detected.vpnProvider,
+    vpnProviders: detected.vpnProviders,
+    connectedClients: active ? mobileLinkState.sseClients.size : 0,
     lastSyncAt: mobileLinkState.lastSyncAt,
   };
 }
@@ -987,10 +1164,24 @@ function readJsonRequestBody(req, maxBytes) {
   });
 }
 
-async function handleMobileSyncRequest(req, res) {
+async function handleMobileSyncRequest(req, res, parsedUrl) {
+  const extraHeaders = {};
+  if (parsedUrl?.searchParams?.has('deviceId')) {
+    const cookies = parseCookies(req.headers.cookie);
+    if (!findMatchingSessionId(cookies[MOBILE_LINK_COOKIE_NAME])) {
+      const sessionId = crypto.randomBytes(24).toString('hex');
+      mobileLinkState.sessions.set(sessionId, {
+        createdAt: Date.now(),
+        lastSeenAt: Date.now(),
+      });
+      extraHeaders['Set-Cookie'] =
+        `${MOBILE_LINK_COOKIE_NAME}=${sessionId}; HttpOnly; SameSite=Strict; Path=/`;
+    }
+  }
+
   if (req.method === 'GET') {
     const safeSnapshot = stripSecretsFromSyncPayload(mobileSyncSnapshot);
-    sendJsonResponse(res, 200, safeSnapshot);
+    sendJsonResponse(res, 200, safeSnapshot, extraHeaders);
     return;
   }
 
@@ -1006,12 +1197,20 @@ async function handleMobileSyncRequest(req, res) {
       if (nextSnapshot.updatedAt > mobileSyncSnapshot.updatedAt) {
         mobileSyncSnapshot = nextSnapshot;
         mobileLinkState.lastSyncAt = Date.now();
+        broadcastMobileLinkEvent('sync', {
+          updatedAt: mobileSyncSnapshot.updatedAt,
+        });
       }
 
-      sendJsonResponse(res, 200, {
-        ok: true,
-        updatedAt: mobileSyncSnapshot.updatedAt,
-      });
+      sendJsonResponse(
+        res,
+        200,
+        {
+          ok: true,
+          updatedAt: mobileSyncSnapshot.updatedAt,
+        },
+        extraHeaders
+      );
     } catch (err) {
       const status =
         err && typeof err.statusCode === 'number' ? err.statusCode : 400;
@@ -1124,6 +1323,16 @@ async function handleMobileLinkHttpRequest(req, res) {
 
   const pathname = parsedUrl.pathname || '/';
 
+  // 0. Mobile Link SSE Event Stream & Info (/api/mobile-link/*) - Must run before /api/* Ollama proxy
+  if (pathname === '/api/mobile-link/events') {
+    handleMobileLinkEvents(req, res, parsedUrl);
+    return;
+  }
+  if (pathname === '/api/mobile-link/info') {
+    handleMobileLinkInfo(req, res);
+    return;
+  }
+
   // 1. Streaming Local LLM Proxy (/api/* -> Ollama 11434, /v1/* -> configured 127.0.0.1 local port such as LM Studio 1234 or Ollama 11434) - Auth required
   if (pathname.startsWith('/api/') || pathname === '/api' || pathname.startsWith('/v1/') || pathname === '/v1') {
     if (!isMobileLinkRequestAuthenticated(req)) {
@@ -1142,7 +1351,7 @@ async function handleMobileLinkHttpRequest(req, res) {
       return;
     }
     if (pathname === '/mobile-sync/state') {
-      await handleMobileSyncRequest(req, res);
+      await handleMobileSyncRequest(req, res, parsedUrl);
       return;
     }
     sendJsonResponse(res, 404, { error: 'Not Found' });
@@ -1271,6 +1480,7 @@ async function startMobileLinkServer(options = {}) {
     mobileLinkState.port = boundPort;
     mobileLinkState.token = token;
     mobileLinkState.sessions.clear();
+    mobileLinkState.sseClients.clear();
 
     return getMobileLinkStatusPayload();
   })();
@@ -1289,6 +1499,18 @@ async function stopMobileLinkServer() {
   mobileLinkState.port = null;
   mobileLinkState.token = null;
   mobileLinkState.sessions.clear();
+
+  for (const clientSet of mobileLinkState.sseClients.values()) {
+    for (const clientRes of clientSet) {
+      try {
+        clientRes.end();
+        clientRes.destroy();
+      } catch {
+        // ignore
+      }
+    }
+  }
+  mobileLinkState.sseClients.clear();
 
   for (const socket of Array.from(mobileLinkState.sockets)) {
     try {

@@ -1,12 +1,10 @@
 import {
-  Download,
   Eye,
   FileImage,
   LayoutGrid,
   LogOut,
   Pencil,
   Plus,
-  QrCode,
   Search,
   Settings,
   Smartphone,
@@ -14,30 +12,22 @@ import {
   X,
 } from 'lucide-react';
 import { motion } from 'motion/react';
-import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
+import { useMemo, useRef, useState, type ChangeEvent } from 'react';
 import type { UIStrings } from '../i18n/translations';
-import type {
-  ApiProvider,
-  Character,
-  Language,
-  UserPersona,
-} from '../types/chat';
+import type { ApiProvider, Character, UserPersona } from '../types/chat';
 import { sanitizeImageUrl } from '../utils/imageUpload';
 import { parsePngCharacterCard } from '../utils/pngCharacterCard';
 import { sanitizeRenderedText } from '../utils/sanitize';
-import { isWebEdition } from '../utils/webEnvironment';
 import { CharacterIcon } from './CharacterIcon';
 import { PWAInstallButton } from './PWAInstallButton';
 
 interface AtriumLobbyProps {
   t: UIStrings;
-  language?: Language;
   characters: Character[];
   activeCharacterId: string;
   selectedModel: string;
   provider?: ApiProvider;
   ollamaStatus: 'checking' | 'connected' | 'offline';
-  isWebDemo?: boolean;
   introDone: boolean;
   userPersona: UserPersona;
   messageCounts: Record<string, number>;
@@ -238,130 +228,13 @@ function LobbyCharacterCard({
 
 const ALL_TAG_KEY = '__ALL__';
 
-interface MobileLinkDemoModalProps {
-  isOpen: boolean;
-  isSpanish: boolean;
-  onClose: () => void;
-}
-
-function MobileLinkDemoModal({
-  isOpen,
-  isSpanish,
-  onClose,
-}: MobileLinkDemoModalProps) {
-  useEffect(() => {
-    if (!isOpen) return;
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        onClose();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
-
-  if (!isOpen) return null;
-
-  const title = isSpanish
-    ? 'Atrium Mobile Link (Puente QR)'
-    : 'Atrium Mobile Link (QR Bridge)';
-  const description = isSpanish
-    ? 'No disponible en Modo Demo Web — Mobile Link ejecuta un servidor local HTTP y QR directamente desde tu PC Windows para vincular tu celular por Wi-Fi LAN o Tailscale VPN sin pasar por la nube.'
-    : 'Unavailable in Web Demo Mode — Mobile Link runs a local encrypted HTTP & QR server directly from your Windows PC so your phone pairs over Wi-Fi LAN or Tailscale VPN with zero cloud servers.';
-  const previewBadge = 'Wi-Fi LAN • Tailscale VPN • Live IndexedDB Sync';
-  const downloadLabel = isSpanish
-    ? 'Descargar Windows v1.5.0 (.exe)'
-    : 'Download Windows v1.5.0 (.exe)';
-  const closeLabel = isSpanish ? 'Cerrar' : 'Close';
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-md"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="mobile-link-demo-modal-title"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) {
-          onClose();
-        }
-      }}
-    >
-      <div className="relative flex w-full max-w-md flex-col overflow-hidden rounded-[28px] border border-[rgba(255,255,255,0.14)] bg-[#0c0e14]/90 shadow-[inset_1px_1px_0_rgba(255,255,255,0.14),0_28px_80px_rgba(0,0,0,0.8)] backdrop-blur-2xl">
-        <div className="flex items-start justify-between gap-4 border-b border-white/10 px-6 py-5">
-          <div className="flex min-w-0 items-start gap-3">
-            <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-white/12 bg-white/[0.05] text-zinc-200 shadow-[inset_0_1px_0_rgba(255,255,255,0.14)]">
-              <Smartphone className="h-5 w-5" aria-hidden="true" />
-            </div>
-            <div className="min-w-0">
-              <h2
-                id="mobile-link-demo-modal-title"
-                className="font-display text-lg font-semibold text-white"
-              >
-                {title}
-              </h2>
-              <p className="mt-0.5 font-mono text-[11px] tracking-wide text-slate-400">
-                V1.5.0 Desktop Bridge
-              </p>
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label={closeLabel}
-            className="inline-flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-zinc-400 transition-colors hover:bg-white/[0.1] hover:text-white focus-visible:outline-2 focus-visible:outline-zinc-300"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-
-        <div className="space-y-4 px-6 py-5">
-          <p className="text-sm leading-relaxed text-zinc-300">{description}</p>
-
-          <div className="flex items-center gap-3 rounded-2xl bg-white/[0.035] px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.1)]">
-            <QrCode
-              className="h-4 w-4 shrink-0 text-slate-300"
-              aria-hidden="true"
-            />
-            <span className="font-mono text-[11px] text-zinc-300">
-              {previewBadge}
-            </span>
-          </div>
-        </div>
-
-        <div className="flex flex-col-reverse gap-2.5 border-t border-white/10 px-6 py-4 sm:flex-row sm:items-center sm:justify-end">
-          <button
-            type="button"
-            onClick={onClose}
-            className="inline-flex min-h-[40px] cursor-pointer items-center justify-center rounded-full bg-white/[0.06] px-4 py-2 text-xs font-medium text-zinc-200 shadow-[inset_0_1px_0_rgba(255,255,255,0.12)] transition hover:bg-white/[0.11] hover:text-white focus-visible:outline-2 focus-visible:outline-zinc-300"
-          >
-            {closeLabel}
-          </button>
-
-          <a
-            href="https://github.com/by-miko/Atrium/releases/latest"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex min-h-[40px] items-center justify-center gap-1.5 rounded-full bg-zinc-100 px-5 py-2 text-xs font-medium text-zinc-950 shadow-[0_8px_24px_rgba(0,0,0,0.5)] transition hover:bg-white focus-visible:outline-2 focus-visible:outline-white"
-          >
-            <Download className="h-3.5 w-3.5" aria-hidden="true" />
-            <span>{downloadLabel}</span>
-          </a>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export function AtriumLobby({
   t,
-  language,
   characters,
   activeCharacterId,
   selectedModel,
   provider = 'ollama',
   ollamaStatus,
-  isWebDemo = false,
   introDone,
   userPersona,
   messageCounts,
@@ -380,10 +253,7 @@ export function AtriumLobby({
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTag, setActiveTag] = useState<string>(ALL_TAG_KEY);
   const [pngImportError, setPngImportError] = useState<string | null>(null);
-  const [isWebMobileModalOpen, setIsWebMobileModalOpen] = useState(false);
   const pngInputRef = useRef<HTMLInputElement | null>(null);
-  const webEdition = isWebEdition();
-  const isSpanish = language === 'es' || t.mobileLinkButton === 'Móvil';
 
   const handlePngFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -569,23 +439,7 @@ export function AtriumLobby({
 
           {/* Right: Liquid Glass Pills (Engine Status, User Persona, Settings, Exit) */}
           <div className="flex items-center gap-1.5 shrink-0 sm:gap-2">
-            {isWebDemo ? (
-              <button
-                type="button"
-                onClick={onOpenSettings}
-                aria-label={t.webDemoStatusReady}
-                title={t.webDemoStatusReady}
-                className="inline-flex h-10 w-10 touch-manipulation items-center justify-center gap-2 rounded-full border border-cyan-400/25 bg-emerald-500/[0.08] px-0 text-xs font-medium text-cyan-100 shadow-[inset_1px_1px_0_rgba(255,255,255,0.16)] backdrop-blur-xl transition-all duration-700 ease-in-out hover:border-cyan-300/50 hover:bg-cyan-500/[0.14] focus-visible:outline-2 focus-visible:outline-[var(--theme-accent)] whitespace-nowrap shrink-0 sm:h-9 sm:w-auto sm:px-3"
-              >
-                <span
-                  aria-hidden="true"
-                  className="h-2 w-2 rounded-full bg-gradient-to-tr from-emerald-400 to-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.8)]"
-                />
-                <span className="hidden md:inline">
-                  {t.webDemoStatusReady}
-                </span>
-              </button>
-            ) : provider === 'openai' ? (
+            {provider === 'openai' ? (
               <button
                 type="button"
                 onClick={onOpenSettings}
@@ -683,17 +537,6 @@ export function AtriumLobby({
                     className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.9)]"
                   />
                 ) : null}
-              </button>
-            ) : webEdition ? (
-              <button
-                type="button"
-                onClick={() => setIsWebMobileModalOpen(true)}
-                aria-label={t.mobileLinkTitle}
-                title={t.mobileLinkTitle}
-                className="inline-flex h-10 w-10 touch-manipulation items-center justify-center gap-1.5 rounded-full border border-[rgba(255,255,255,0.12)] bg-[var(--theme-glass)] px-0 text-xs font-medium text-white/90 shadow-[inset_1px_1px_0_rgba(255,255,255,0.16)] backdrop-blur-xl transition-colors duration-700 ease-in-out hover:bg-[var(--theme-glass-hover)] hover:text-white focus-visible:outline-2 focus-visible:outline-[var(--theme-accent)] whitespace-nowrap shrink-0 sm:h-9 sm:w-auto sm:px-3"
-              >
-                <Smartphone className="h-4 w-4 text-[var(--theme-accent)] sm:h-3.5 sm:w-3.5" />
-                <span className="hidden sm:inline">{t.mobileLinkButton}</span>
               </button>
             ) : null}
 
@@ -884,14 +727,6 @@ export function AtriumLobby({
           )}
         </div>
       </div>
-
-      {webEdition ? (
-        <MobileLinkDemoModal
-          isOpen={isWebMobileModalOpen}
-          isSpanish={isSpanish}
-          onClose={() => setIsWebMobileModalOpen(false)}
-        />
-      ) : null}
     </div>
   );
 }

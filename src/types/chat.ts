@@ -112,6 +112,8 @@ export interface VisualStudioSettings {
   customActionColor?: string;
 }
 
+export type MeshVpnProvider = 'Tailscale' | 'ZeroTier' | 'NetBird' | 'WireGuard';
+
 export interface MobileLinkUrls {
   lan: string[];
   tailscale: string[];
@@ -122,6 +124,10 @@ export interface MobileLinkStatus {
   port: number | null;
   token: string | null;
   urls: MobileLinkUrls;
+  lanUrl?: string | null;
+  vpnUrl?: string | null;
+  vpnProvider?: MeshVpnProvider | null;
+  vpnProviders?: MeshVpnProvider[];
   connectedClients: number;
   lastSyncAt: number | null;
 }

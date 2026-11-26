@@ -75,7 +75,6 @@ interface ChatWindowProps {
   selectedModel: string;
   ollamaUrl: string;
   provider?: ApiProvider;
-  isWebDemo?: boolean;
   userPersona: UserPersona;
   wallpaperFit: WallpaperFitMode;
   parallaxEnabled: boolean;
@@ -119,7 +118,6 @@ export function ChatWindow({
   selectedModel,
   ollamaUrl,
   provider = 'ollama',
-  isWebDemo = false,
   userPersona,
   wallpaperFit,
   parallaxEnabled,
@@ -1457,15 +1455,16 @@ export function ChatWindow({
           y: hideBubbles ? 16 : 0,
         }}
         transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
-        className={`pb-safe relative z-10 shrink-0 px-3 pt-1.5 sm:px-6 sm:pb-4 lg:pb-6 ${
+        className={`relative z-10 shrink-0 px-3 pt-1.5 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] sm:px-6 sm:pb-4 lg:pb-6 ${
           hideBubbles ? 'pointer-events-none' : ''
         }`}
       >
-        {voiceError
-          ? renderAdaptiveRow(
+        {voiceError ? (
+          <div className="pointer-events-none absolute inset-x-0 bottom-full z-20 mb-2 px-3 sm:px-6">
+            {renderAdaptiveRow(
               <div
                 role="status"
-                className="mb-2 flex items-center justify-between gap-3 rounded-2xl border border-amber-400/30 bg-amber-950/75 px-4 py-2 text-xs text-amber-100 backdrop-blur-xl"
+                className="pointer-events-auto flex items-center justify-between gap-3 rounded-2xl border border-amber-400/35 bg-amber-950/90 px-4 py-2 text-xs text-amber-100 shadow-xl backdrop-blur-xl"
               >
                 <span>{voiceError}</span>
                 <button
@@ -1476,8 +1475,9 @@ export function ChatWindow({
                   {t.dismiss}
                 </button>
               </div>
-            )
-          : null}
+            )}
+          </div>
+        ) : null}
 
         <AnimatePresence mode="wait" initial={false}>
           {isComposerCollapsed ? (
@@ -1672,11 +1672,7 @@ export function ChatWindow({
 
                   <div className="mt-1.5 hidden items-center justify-between gap-3 px-3 text-[10.5px] leading-none [text-shadow:0_1px_2px_rgba(0,0,0,0.85)] sm:flex">
                     <span className="truncate text-white/65">
-                      {t.composerHint(
-                        isWebDemo
-                          ? 'atrium-web-demo-8b (Simulated Stream)'
-                          : ollamaUrl
-                      )}
+                      {t.composerHint(ollamaUrl)}
                     </span>
                     <span
                       className={`shrink-0 font-mono tabular-nums ${charCountClass}`}
