@@ -1,9 +1,9 @@
-﻿name: Deploy Atrium Web Edition to GitHub Pages
+name: Deploy Atrium Web Edition to GitHub Pages
 
 on:
   push:
     branches:
-      - main
+      - web-landing
   workflow_dispatch:
 
 permissions:
