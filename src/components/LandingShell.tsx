@@ -16,6 +16,7 @@ import {
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ReactNode,
@@ -147,11 +148,7 @@ interface LandingCopy {
   evolution: {
     eyebrow: string;
     title: string;
-    milestones: readonly [
-      EvolutionMilestone,
-      EvolutionMilestone,
-      EvolutionMilestone,
-    ];
+    milestones: readonly EvolutionMilestone[];
   };
   creator: {
     eyebrow: string;
@@ -191,6 +188,30 @@ interface LandingCopy {
     copyright: string;
     license: string;
     skipIntro: string;
+    secretAriaLabel: string;
+  };
+  secretGame: {
+    hudLabel: string;
+    scoreLabel: string;
+    timeLabel: string;
+    hintLabel: string;
+    closeAriaLabel: string;
+    lostEyebrow: string;
+    lostTitle: string;
+    lostSubtitle: string;
+    retryButton: string;
+    closeButton: string;
+    wonEyebrow: string;
+    wonTitle: string;
+    wonSubtitle: string;
+    playAgainButton: string;
+    returnButton: string;
+    questions: readonly [
+      { question: string; answer: string },
+      { question: string; answer: string },
+      { question: string; answer: string },
+      { question: string; answer: string },
+    ];
   };
 }
 
@@ -214,14 +235,14 @@ const LANDING_COPY: Record<LandingLang, LandingCopy> = {
       github: 'GitHub',
     },
     hero: {
-      statusPill: 'ATRIUM V1.5.0 HARDENED • LOCAL-FIRST STUDIO',
-      statusPillMobile: 'ATRIUM V1.5.0 • LOCAL-FIRST',
+      statusPill: 'ATRIUM LATEST EDITION • LOCAL-FIRST STUDIO',
+      statusPillMobile: 'ATRIUM LATEST • LOCAL-FIRST',
       headlinePrimary: 'Your Private AI Roleplay Studio.',
       headlineAccent: 'Crafted in Optical Liquid Glass.',
       identityBody:
         'Bring characters to life on your Windows PC and pair your phone instantly via QR. 100% private, zero subscriptions, powered by Ollama, LM Studio, or your own API keys.',
       primaryCta: 'Try Live Web Demo',
-      secondaryCta: 'Download Windows v1.5.0',
+      secondaryCta: 'Download Latest for Windows',
       metrics: [
         {
           title: '100% Local-First',
@@ -232,14 +253,14 @@ const LANDING_COPY: Record<LandingLang, LandingCopy> = {
           subtitle: 'LAN & Tailscale Sync',
         },
         {
-          title: 'v1.5.0 Hardened',
+          title: 'Latest Edition',
           subtitle: 'DPAPI & Sandboxed',
         },
       ],
       scrollCue: 'Scroll to see how Atrium works in 3 steps',
     },
     emblemStage: {
-      studioLabel: 'ATRIUM STUDIO • V1.5.0',
+      studioLabel: 'ATRIUM STUDIO • LATEST',
       actionHint: 'Launch Live Demo →',
     },
     howItWorks: {
@@ -271,10 +292,10 @@ const LANDING_COPY: Record<LandingLang, LandingCopy> = {
     showcase: {
       eyebrow: 'SHOWCASE // LIVE WORKFLOW',
       title: 'Designed for Pure Immersion.',
-      fallbackBadge: 'ATRIUM V1.5.0 // INTERACTIVE REEL',
+      fallbackBadge: 'ATRIUM LATEST EDITION // INTERACTIVE REEL',
       fallbackTitle: 'See the Liquid Glass Lobby in Motion',
       fallbackDescription:
-        'Step inside the browser demo right now or watch the full v1.5.0 release reel and Windows desktop source on GitHub.',
+        'Step inside the browser demo right now or watch the latest release reel and Windows desktop source on GitHub.',
       fallbackStudioCta: 'Launch Studio',
       fallbackGithubCta: 'View on GitHub ↗',
     },
@@ -338,7 +359,7 @@ const LANDING_COPY: Record<LandingLang, LandingCopy> = {
           body: 'Pair your Windows desktop with your phone in one scan over Wi-Fi LAN or Tailscale VPN—zero firewall setup, local streaming proxy for Ollama & LM Studio, and bidirectional IndexedDB sync.',
         },
         {
-          indexLabel: '03 // Hardened v1.5.0',
+          indexLabel: '03 // Hardened Edition',
           accent: 'silver',
           title: 'Zero-Telemetry Defense in Depth',
           body: 'Sandboxed Electron 35 runtime, Windows DPAPI credential encryption, binary @electron/fuses sealing, and audited SECURITY.md policy.',
@@ -365,10 +386,16 @@ const LANDING_COPY: Record<LandingLang, LandingCopy> = {
         },
         {
           version: 'v1.5.1',
+          tag: 'Network Hardening',
+          title: 'v1.5.1 Multi-Mesh VPN & Network Hardening',
+          body: 'ZeroTier, WireGuard, and Tailscale multi-mesh CIDR detection, strict loopback and private-network enforcement, and the official Optical Liquid Glass web showcase.',
+        },
+        {
+          version: 'v1.5.2',
           tag: 'Current',
           isCurrent: true,
-          title: 'v1.5.1 Official Web & Interactive Studio (Current)',
-          body: 'Optical Liquid Glass showcase portal, Bento studio previews, live browser streaming simulator, and zero-telemetry open-source distribution.',
+          title: 'v1.5.2 TavernAI Card Ecosystem & Ambient Glass (Current)',
+          body: 'Full TavernAI V2/V3 .png card import/export with <canvas> sanitization, FLIP-animated spatial lobby transitions, and adaptive portrait ambient glass.',
         },
       ],
     },
@@ -384,7 +411,7 @@ const LANDING_COPY: Record<LandingLang, LandingCopy> = {
       eyebrow: 'WEB SANDBOX // DIRECT ENTRY',
       title: 'Experience Atrium Anywhere.',
       subtitle:
-        'Launch the interactive browser studio immediately, or install the hardened Windows v1.5.0 desktop build for local Electron sandboxing and Mobile Link QR sync.',
+        'Launch the interactive browser studio immediately, or install the hardened Windows desktop build for local Electron sandboxing and Mobile Link QR sync.',
       primaryButton: 'Enter Atrium Studio →',
       setupDownload: 'Windows Installer (.exe)',
       portableDownload: 'Portable (.exe)',
@@ -411,8 +438,54 @@ const LANDING_COPY: Record<LandingLang, LandingCopy> = {
     },
     footer: {
       copyright: '© 2026 Miko (by-Miko)',
-      license: 'MIT Open Source • V1.5.0 Hardened',
+      license: 'MIT Open Source • Latest Hardened Edition',
       skipIntro: 'Skip',
+      secretAriaLabel: 'Open hidden Atrium chronicle',
+    },
+    secretGame: {
+      hudLabel: 'ATRIUM // SHARD TRIAL',
+      scoreLabel: 'SCORE',
+      timeLabel: 'TIME',
+      hintLabel: 'Tap falling crystal sigils to reach 100 points',
+      closeAriaLabel: 'Close hidden game',
+      lostEyebrow: 'TRIAL INCOMPLETE',
+      lostTitle: 'Almost There.',
+      lostSubtitle:
+        'Catch 10 falling Atrium sigils within 20 seconds to unlock the behind-the-scenes chronicle.',
+      retryButton: 'Retry',
+      closeButton: 'Close',
+      wonEyebrow: 'BEHIND ATRIUM // UNLOCKED CHRONICLE',
+      wonTitle: 'Four Honest Questions Behind Atrium',
+      wonSubtitle:
+        'You caught all ten shards. Here is the candid story of what it took to turn a blank screen into a real open-source studio.',
+      playAgainButton: 'Play Again',
+      returnButton: 'Return to Atrium',
+      questions: [
+        {
+          question:
+            'What is it like building your very first application from scratch?',
+          answer:
+            'Building your very first real application from scratch feels equal parts exhilarating and terrifying. It meant spending long, quiet nights learning every piece from nothing—watching builds break at three in the morning, staring at stubborn errors, and wondering if an idea living inside your head could ever become real software. You doubt yourself more times than you count, especially when you are figuring everything out alone before even stepping into university. Yet refusing to quit until a blank dark screen finally turned into a living, local-first studio made every sleepless hour worth it.',
+        },
+        {
+          question:
+            'What was the biggest scare or frustration along the way?',
+          answer:
+            'The biggest scare happened late one night when GitHub suddenly locked my account right after I deleted two .exe release binaries without two-factor authentication enabled—for a few endless moments, I genuinely thought weeks of work had vanished forever. Beyond that panic, the real daily test was the relentless battle against invisible details: stubborn caches serving stale states, real-world network quirks across devices, and tearing down animations ten times over until they finally moved with quiet weight instead of snapping abruptly.',
+        },
+        {
+          question:
+            'How was this actually built between a human and an AI?',
+          answer:
+            'It was built through dozens of hours of stubborn, back-and-forth collaboration rather than a single magic prompt. Miko brought the vision, the persistence, the high visual standards, and endless real-device testing—refusing to settle for "good enough" whenever a margin, glass reflection, or transition felt slightly off. Working side by side, the AI endured every late-night pivot, rollback, and pixel-level critique, translating rough intuition into structured code until every single detail clicked into place.',
+        },
+        {
+          question:
+            'What goes through your mind knowing strangers might actually use this—and what would you tell them?',
+          answer:
+            'Sending something this personal out into the open brings an honest mix of nerves, vulnerability, and quiet hope. When it is your first real creation, you wonder how strangers will look at it, yet you still hope that whoever downloads Atrium feels the care behind every detail and genuinely enjoys making it their own. If you have an idea sitting in your mind, try it—don’t keep it locked inside your head. I took the leap, dared to build and upload this app, and I don’t regret it for a second. My only wish is that you never stop doing what you love.',
+        },
+      ],
     },
   },
   es: {
@@ -427,14 +500,14 @@ const LANDING_COPY: Record<LandingLang, LandingCopy> = {
       github: 'GitHub',
     },
     hero: {
-      statusPill: 'ATRIUM V1.5.0 HARDENED • LOCAL-FIRST STUDIO',
-      statusPillMobile: 'ATRIUM V1.5.0 • LOCAL-FIRST',
+      statusPill: 'ATRIUM ÚLTIMA EDICIÓN • LOCAL-FIRST STUDIO',
+      statusPillMobile: 'ATRIUM LATEST • LOCAL-FIRST',
       headlinePrimary: 'Tu Estudio Privado de Roleplay con IA.',
       headlineAccent: 'Diseñado en Optical Liquid Glass.',
       identityBody:
         'Da vida a personajes inmersivos en tu PC Windows y vincula tu celular al instante por QR. 100% privado, sin suscripciones, compatible con Ollama, LM Studio o tus propias APIs.',
       primaryCta: 'Probar Demo en Vivo',
-      secondaryCta: 'Descargar Windows v1.5.0',
+      secondaryCta: 'Descargar Windows (Última Versión)',
       metrics: [
         {
           title: '100% Local-First',
@@ -445,14 +518,14 @@ const LANDING_COPY: Record<LandingLang, LandingCopy> = {
           subtitle: 'Sync LAN y Tailscale',
         },
         {
-          title: 'v1.5.0 Endurecida',
+          title: 'Última Edición',
           subtitle: 'DPAPI y Sandbox',
         },
       ],
       scrollCue: 'Desliza para ver cómo funciona Atrium en 3 pasos',
     },
     emblemStage: {
-      studioLabel: 'ATRIUM STUDIO • V1.5.0',
+      studioLabel: 'ATRIUM STUDIO • LATEST',
       actionHint: 'Abrir Demo en Vivo →',
     },
     howItWorks: {
@@ -484,10 +557,10 @@ const LANDING_COPY: Record<LandingLang, LandingCopy> = {
     showcase: {
       eyebrow: 'SHOWCASE // FLUJO EN VIVO',
       title: 'Diseñado para Inmersión Pura.',
-      fallbackBadge: 'ATRIUM V1.5.0 // REEL INTERACTIVO',
+      fallbackBadge: 'ATRIUM ÚLTIMA EDICIÓN // REEL INTERACTIVO',
       fallbackTitle: 'Explora el Lobby Liquid Glass en Acción',
       fallbackDescription:
-        'Entra ahora mismo a la demo interactiva en tu navegador o consulta el video y código fuente de Windows v1.5.0 en GitHub.',
+        'Entra ahora mismo a la demo interactiva en tu navegador o consulta el video y código fuente de la última versión para Windows en GitHub.',
       fallbackStudioCta: 'Abrir Estudio',
       fallbackGithubCta: 'Ver en GitHub ↗',
     },
@@ -551,7 +624,7 @@ const LANDING_COPY: Record<LandingLang, LandingCopy> = {
           body: 'Vincula tu PC Windows con tu teléfono en un solo escaneo por Wi-Fi LAN o Tailscale VPN: cero configuración de firewall, proxy local para Ollama y LM Studio y sincronización IndexedDB bidireccional.',
         },
         {
-          indexLabel: '03 // Hardened v1.5.0',
+          indexLabel: '03 // Edición Endurecida',
           accent: 'silver',
           title: 'Defensa en Profundidad Sin Telemetría',
           body: 'Entorno Electron 35 aislado en sandbox, cifrado de credenciales con Windows DPAPI, sellado binario con @electron/fuses y política auditada en SECURITY.md.',
@@ -578,10 +651,16 @@ const LANDING_COPY: Record<LandingLang, LandingCopy> = {
         },
         {
           version: 'v1.5.1',
+          tag: 'Endurecimiento de Red',
+          title: 'v1.5.1 VPN Multi-Mesh y Endurecimiento de Red',
+          body: 'Detección CIDR multi-mesh para ZeroTier, WireGuard y Tailscale, validación estricta de red local/loopback y portal web oficial en Optical Liquid Glass.',
+        },
+        {
+          version: 'v1.5.2',
           tag: 'Actual',
           isCurrent: true,
-          title: 'v1.5.1 Web Oficial y Estudio Interactivo (Actual)',
-          body: 'Portal showcase en Optical Liquid Glass, vistas Bento del estudio, simulador de streaming en navegador y distribución open-source sin telemetría.',
+          title: 'v1.5.2 Ecosistema TavernAI y Cristal Ambiental (Actual)',
+          body: 'Importación y exportación de tarjetas TavernAI V2/V3 .png con sanitización <canvas>, transiciones FLIP en el lobby espacial y cristal ambiental adaptable a retratos.',
         },
       ],
     },
@@ -597,7 +676,7 @@ const LANDING_COPY: Record<LandingLang, LandingCopy> = {
       eyebrow: 'SANDBOX WEB // ACCESO DIRECTO',
       title: 'Prueba Atrium Donde Quieras.',
       subtitle:
-        'Abre el estudio interactivo en tu navegador al instante o descarga la compilación endurecida para Windows v1.5.0 con sandbox Electron y sincronización QR Mobile Link.',
+        'Abre el estudio interactivo en tu navegador al instante o descarga la compilación endurecida para Windows con sandbox Electron y sincronización QR Mobile Link.',
       primaryButton: 'Entrar a Atrium Studio →',
       setupDownload: 'Instalador Windows (.exe)',
       portableDownload: 'Portable (.exe)',
@@ -624,8 +703,54 @@ const LANDING_COPY: Record<LandingLang, LandingCopy> = {
     },
     footer: {
       copyright: '© 2026 Miko (by-Miko)',
-      license: 'MIT Open Source • V1.5.0 Endurecida',
+      license: 'MIT Open Source • Última Edición Endurecida',
       skipIntro: 'Saltar',
+      secretAriaLabel: 'Abrir crónica oculta de Atrium',
+    },
+    secretGame: {
+      hudLabel: 'ATRIUM // PRUEBA DE FRAGMENTOS',
+      scoreLabel: 'PUNTOS',
+      timeLabel: 'TIEMPO',
+      hintLabel: 'Toca los sigilos de cristal que caen para llegar a 100 puntos',
+      closeAriaLabel: 'Cerrar juego oculto',
+      lostEyebrow: 'PRUEBA INCOMPLETA',
+      lostTitle: 'Casi lo Logras.',
+      lostSubtitle:
+        'Atrapa 10 sigilos de Atrium antes de que pasen 20 segundos para desbloquear la crónica detrás del proyecto.',
+      retryButton: 'Reintentar',
+      closeButton: 'Cerrar',
+      wonEyebrow: 'DETRÁS DE ATRIUM // CRÓNICA DESBLOQUEADA',
+      wonTitle: 'Cuatro Preguntas Sinceras Detrás de Atrium',
+      wonSubtitle:
+        'Atrapaste los diez fragmentos. Aquí está la historia real de lo que costó convertir una pantalla en blanco en un estudio open-source.',
+      playAgainButton: 'Jugar de Nuevo',
+      returnButton: 'Volver a Atrium',
+      questions: [
+        {
+          question:
+            '¿Cómo se siente construir tu primera aplicación desde cero?',
+          answer:
+            'Construir tu primera aplicación real desde cero se siente emocionante y abrumador al mismo tiempo. Significó pasar noches largas y silenciosas aprendiendo cada pieza desde la nada, viendo cómo todo fallaba a las tres de la madrugada y preguntándome si una idea que solo existía en mi cabeza podría convertirse algún día en software de verdad. Dudas de ti mismo más veces de las que cuentas, sobre todo cuando estás descubriendo todo por tu cuenta antes siquiera de entrar a la universidad. Pero negarte a rendirte hasta ver una pantalla oscura transformarse en un estudio local-first vivo hizo que cada desvelo valiera la pena.',
+        },
+        {
+          question:
+            '¿Cuál fue el mayor susto o frustración en el camino?',
+          answer:
+            'El mayor susto ocurrió una noche cuando GitHub bloqueó de golpe mi cuenta justo después de borrar dos binarios .exe de lanzamiento sin tener activada la verificación en dos pasos; durante unos minutos eternos creí de verdad que semanas enteras de trabajo se habían esfumado para siempre. Más allá de ese pánico, la prueba diaria más dura fue pelear contra detalles invisibles: cachés tercos que devolvían versiones viejas, rarezas reales de red entre dispositivos y reconstruir animaciones diez veces seguidas hasta que por fin se sintieran fluidas y naturales.',
+        },
+        {
+          question:
+            '¿Cómo se construyó realmente esto entre una persona y una IA?',
+          answer:
+            'Se construyó a base de horas y horas de colaboración incansable de ida y vuelta, nunca con un simple comando mágico. Miko aportó la intuición, la terquedad, la exigencia visual y pruebas reales sin descanso—negándose a aceptar un "ya está suficiente" cada vez que un borde, un reflejo de cristal o una transición no se sentían bien. Trabajando codo a codo, la IA aguantó cada cambio nocturno de rumbo, cada marcha atrás y cada corrección al detalle hasta que cada pieza encajó en su sitio.',
+        },
+        {
+          question:
+            '¿Qué pasa por tu mente al saber que alguien más podría usar esto, y qué le dirías?',
+          answer:
+            'Lanzar al mundo algo tan personal despierta una mezcla honesta de nervios, vulnerabilidad y una esperanza silenciosa. Cuando es tu primera obra real te preguntas cómo la mirarán personas que no conoces, pero aun así deseas que quien descargue Atrium sienta el cariño detrás de cada detalle y disfrute hacerlo suyo. Si tienes una idea guardada en la mente, inténtalo—no la dejes encerrada en tu cabeza. Yo me arriesgué, me atreví a construir y subir esta aplicación, y no me arrepiento ni un segundo. Lo único que deseo es que nunca dejes de hacer lo que amas.',
+        },
+      ],
     },
   },
 };
@@ -673,6 +798,229 @@ const BOOT_DUST_MOTES = [
   { id: 5, left: '46%', top: '24%', size: 2, color: '#fbbf24', delay: '0.6s', duration: '4.0s' },
   { id: 6, left: '54%', top: '70%', size: 2.5, color: '#a78bfa', delay: '0.5s', duration: '3.9s' },
 ] as const;
+
+const GITHUB_LATEST_RELEASE_API =
+  'https://api.github.com/repos/by-Miko/Atrium/releases/latest';
+const RELEASE_CACHE_KEY = 'atrium_latest_release_tag_v1';
+const RELEASE_CACHE_TTL_MS = 15 * 60 * 1000;
+const SEMVER_TAG_PATTERN = /^v?\d+\.\d+\.\d+(?:[-+.\w]*)?$/i;
+
+function normalizeReleaseTag(rawTag: unknown): string | null {
+  if (typeof rawTag !== 'string') return null;
+  const trimmed = rawTag.trim();
+  if (!SEMVER_TAG_PATTERN.test(trimmed)) return null;
+  return trimmed.startsWith('v') || trimmed.startsWith('V')
+    ? `v${trimmed.slice(1)}`
+    : `v${trimmed}`;
+}
+
+function readCachedReleaseTag(): string | null {
+  try {
+    const raw = window.sessionStorage.getItem(RELEASE_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { tag?: unknown; cachedAt?: unknown };
+    if (
+      typeof parsed?.cachedAt !== 'number' ||
+      Date.now() - parsed.cachedAt > RELEASE_CACHE_TTL_MS
+    ) {
+      return null;
+    }
+    return normalizeReleaseTag(parsed.tag);
+  } catch {
+    return null;
+  }
+}
+
+function writeCachedReleaseTag(tag: string): void {
+  try {
+    window.sessionStorage.setItem(
+      RELEASE_CACHE_KEY,
+      JSON.stringify({ tag, cachedAt: Date.now() })
+    );
+  } catch {
+    // Ignore sessionStorage restrictions in private browsing modes.
+  }
+}
+
+function useLatestAtriumRelease(): string | null {
+  const [latestTag, setLatestTag] = useState<string | null>(() =>
+    readCachedReleaseTag()
+  );
+
+  useEffect(() => {
+    const cached = readCachedReleaseTag();
+    if (cached) {
+      setLatestTag(cached);
+      return;
+    }
+
+    const controller = new AbortController();
+
+    fetch(GITHUB_LATEST_RELEASE_API, {
+      method: 'GET',
+      headers: { Accept: 'application/vnd.github+json' },
+      signal: controller.signal,
+    })
+      .then((res) => {
+        if (!res.ok) return null;
+        return res.json() as Promise<{ tag_name?: unknown }>;
+      })
+      .then((data) => {
+        if (!data) return;
+        const normalized = normalizeReleaseTag(data.tag_name);
+        if (!normalized) return;
+        writeCachedReleaseTag(normalized);
+        setLatestTag(normalized);
+      })
+      .catch(() => {
+        // Fallback cleanly to evergreen release labels when offline or rate-limited.
+      });
+
+    return () => {
+      controller.abort();
+    };
+  }, []);
+
+  return latestTag;
+}
+
+function applyReleaseVersionToCopy(
+  baseCopy: LandingCopy,
+  lang: LandingLang,
+  latestTag: string | null
+): LandingCopy {
+  if (!latestTag) return baseCopy;
+
+  const upperTag = latestTag.toUpperCase();
+
+  if (lang === 'es') {
+    return {
+      ...baseCopy,
+      hero: {
+        ...baseCopy.hero,
+        statusPill: `ATRIUM ${upperTag} HARDENED • LOCAL-FIRST STUDIO`,
+        statusPillMobile: `ATRIUM ${upperTag} • LOCAL-FIRST`,
+        secondaryCta: `Descargar Windows ${latestTag}`,
+        metrics: [
+          baseCopy.hero.metrics[0],
+          baseCopy.hero.metrics[1],
+          {
+            ...baseCopy.hero.metrics[2],
+            title: `${latestTag} Endurecida`,
+          },
+        ],
+      },
+      emblemStage: {
+        ...baseCopy.emblemStage,
+        studioLabel: `ATRIUM STUDIO • ${upperTag}`,
+      },
+      showcase: {
+        ...baseCopy.showcase,
+        fallbackBadge: `ATRIUM ${upperTag} // REEL INTERACTIVO`,
+        fallbackDescription: `Entra ahora mismo a la demo interactiva en tu navegador o consulta el video y código fuente de Windows ${latestTag} en GitHub.`,
+      },
+      architecture: {
+        ...baseCopy.architecture,
+        facts: baseCopy.architecture.facts.map((fact, index) =>
+          index === 2
+            ? { ...fact, indexLabel: `03 // Hardened ${latestTag}` }
+            : fact
+        ),
+      },
+      launch: {
+        ...baseCopy.launch,
+        subtitle: `Abre el estudio interactivo en tu navegador al instante o descarga la compilación endurecida para Windows ${latestTag} con sandbox Electron y sincronización QR Mobile Link.`,
+      },
+      footer: {
+        ...baseCopy.footer,
+        license: `MIT Open Source • ${upperTag} Endurecida`,
+      },
+    };
+  }
+
+  return {
+    ...baseCopy,
+    hero: {
+      ...baseCopy.hero,
+      statusPill: `ATRIUM ${upperTag} HARDENED • LOCAL-FIRST STUDIO`,
+      statusPillMobile: `ATRIUM ${upperTag} • LOCAL-FIRST`,
+      secondaryCta: `Download Windows ${latestTag}`,
+      metrics: [
+        baseCopy.hero.metrics[0],
+        baseCopy.hero.metrics[1],
+        {
+          ...baseCopy.hero.metrics[2],
+          title: `${latestTag} Hardened`,
+        },
+      ],
+    },
+    emblemStage: {
+      ...baseCopy.emblemStage,
+      studioLabel: `ATRIUM STUDIO • ${upperTag}`,
+    },
+    showcase: {
+      ...baseCopy.showcase,
+      fallbackBadge: `ATRIUM ${upperTag} // INTERACTIVE REEL`,
+      fallbackDescription: `Step inside the browser demo right now or watch the full ${latestTag} release reel and Windows desktop source on GitHub.`,
+    },
+    architecture: {
+      ...baseCopy.architecture,
+      facts: baseCopy.architecture.facts.map((fact, index) =>
+        index === 2
+          ? { ...fact, indexLabel: `03 // Hardened ${latestTag}` }
+          : fact
+      ),
+    },
+    launch: {
+      ...baseCopy.launch,
+      subtitle: `Launch the interactive browser studio immediately, or install the hardened Windows ${latestTag} desktop build for local Electron sandboxing and Mobile Link QR sync.`,
+    },
+    footer: {
+      ...baseCopy.footer,
+      license: `MIT Open Source • ${upperTag} Hardened`,
+    },
+  };
+}
+
+function AmbientLiquidGlassBackdrop() {
+  return (
+    <div
+      aria-hidden="true"
+      className="pointer-events-none fixed inset-0 z-0 overflow-hidden"
+    >
+      <div
+        className="mobile-bg-gpu-layer absolute top-0 left-0 h-[360px] w-[360px] rounded-full opacity-[0.15] blur-[96px] will-change-transform sm:h-[62vh] sm:w-[72vw] sm:opacity-[0.11] sm:blur-[160px]"
+        style={{
+          background:
+            'linear-gradient(135deg, #8b5cf6 0%, #38bdf8 55%, #f59e0b 100%)',
+          animation: 'landingVeilDriftA 38s ease-in-out infinite alternate',
+        }}
+      />
+      <div
+        className="mobile-bg-gpu-layer absolute top-0 left-0 h-[360px] w-[360px] rounded-full opacity-[0.15] blur-[96px] will-change-transform sm:h-[62vh] sm:w-[72vw] sm:opacity-[0.11] sm:blur-[160px]"
+        style={{
+          background:
+            'linear-gradient(225deg, #38bdf8 0%, #8b5cf6 52%, #f59e0b 100%)',
+          animation: 'landingVeilDriftB 38s ease-in-out infinite alternate',
+        }}
+      />
+      {BOOT_DUST_MOTES.map((mote) => (
+        <span
+          key={`ambient-mote-${mote.id}`}
+          className="mobile-bg-gpu-layer absolute rounded-full opacity-55 will-change-transform"
+          style={{
+            left: mote.left,
+            top: mote.top,
+            width: `${mote.size}px`,
+            height: `${mote.size}px`,
+            backgroundColor: mote.color,
+            animation: `landingDustFloat ${mote.duration} ease-in-out ${mote.delay} infinite`,
+          }}
+        />
+      ))}
+    </div>
+  );
+}
 
 function DoubleArchEmblem({
   idPrefix,
@@ -975,11 +1323,489 @@ function DownloadTransparencyModal({
   );
 }
 
+interface FallingSigil {
+  id: number;
+  xPct: number;
+  yPct: number;
+  speedPctPerSec: number;
+  variant: 'amethyst' | 'champagne';
+}
+
+interface ShatterRipple {
+  id: number;
+  xPct: number;
+  yPct: number;
+  variant: 'amethyst' | 'champagne';
+}
+
+function CrystalSigilGlyph({
+  variant,
+  uid,
+}: {
+  variant: 'amethyst' | 'champagne';
+  uid: number;
+}) {
+  const isGold = variant === 'champagne';
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 64 64"
+      fill="none"
+      aria-hidden="true"
+      className={`h-11 w-11 transition-transform duration-150 active:scale-90 sm:h-12 sm:w-12 ${
+        isGold
+          ? 'drop-shadow-[0_0_14px_rgba(229,204,160,0.55)]'
+          : 'drop-shadow-[0_0_14px_rgba(139,92,246,0.62)]'
+      }`}
+    >
+      <defs>
+        <linearGradient
+          id={`sigil-ring-${uid}`}
+          x1="32"
+          y1="6"
+          x2="32"
+          y2="58"
+          gradientUnits="userSpaceOnUse"
+        >
+          <stop offset="0%" stopColor={isGold ? '#fef3c7' : '#c4b5fd'} />
+          <stop offset="100%" stopColor={isGold ? '#d4a964' : '#8b5cf6'} />
+        </linearGradient>
+      </defs>
+      <polygon
+        points="32,4 58,32 32,60 6,32"
+        fill={isGold ? 'rgba(229,204,160,0.12)' : 'rgba(139,92,246,0.15)'}
+        stroke={`url(#sigil-ring-${uid})`}
+        strokeWidth="2"
+      />
+      <path
+        d="M22 42V29C22 23.477 26.477 19 32 19C37.523 19 42 23.477 42 29V42"
+        stroke={isGold ? '#e5cca0' : '#c4b5fd'}
+        strokeWidth="3.2"
+        strokeLinecap="round"
+      />
+      <path
+        d="M27.5 42V30.5C27.5 27.462 29.515 25 32 25C34.485 25 36.5 27.462 36.5 30.5V42"
+        stroke="#f4f4f5"
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
+      <circle
+        cx="32"
+        cy="34.5"
+        r="2.4"
+        fill={isGold ? '#fbbf24' : '#a78bfa'}
+      />
+    </svg>
+  );
+}
+
+function SecretChronicleOverlay({
+  open,
+  copy,
+  onClose,
+}: {
+  open: boolean;
+  copy: LandingCopy['secretGame'];
+  onClose: () => void;
+}) {
+  const [phase, setPhase] = useState<'playing' | 'won' | 'lost'>('playing');
+  const [score, setScore] = useState<number>(0);
+  const [timeLeft, setTimeLeft] = useState<number>(20);
+  const [sigils, setSigils] = useState<FallingSigil[]>([]);
+  const [ripples, setRipples] = useState<ShatterRipple[]>([]);
+  const [runKey, setRunKey] = useState<number>(0);
+
+  const nextIdRef = useRef<number>(1);
+  const scoreRef = useRef<number>(0);
+  const phaseRef = useRef<'playing' | 'won' | 'lost'>('playing');
+  const rippleTimersRef = useRef<number[]>([]);
+
+  const startFreshRun = useCallback(() => {
+    for (const timerId of rippleTimersRef.current) {
+      window.clearTimeout(timerId);
+    }
+    rippleTimersRef.current = [];
+    scoreRef.current = 0;
+    phaseRef.current = 'playing';
+    setScore(0);
+    setTimeLeft(20);
+    setRipples([]);
+    setPhase('playing');
+
+    const initialBatch: FallingSigil[] = Array.from({ length: 3 }, (_, i) => {
+      const id = nextIdRef.current++;
+      return {
+        id,
+        xPct: 18 + i * 30 + (Math.random() * 10 - 5),
+        yPct: -6 - i * 16,
+        speedPctPerSec: 23 + Math.random() * 9,
+        variant: i % 2 === 0 ? 'amethyst' : 'champagne',
+      };
+    });
+    setSigils(initialBatch);
+    setRunKey((prev) => prev + 1);
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    startFreshRun();
+    return () => {
+      for (const timerId of rippleTimersRef.current) {
+        window.clearTimeout(timerId);
+      }
+      rippleTimersRef.current = [];
+    };
+  }, [open, startFreshRun]);
+
+  useEffect(() => {
+    if (!open) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose, open]);
+
+  useEffect(() => {
+    if (!open || phase !== 'playing') return;
+
+    const durationMs = 20000;
+    const startedAt = performance.now();
+    let lastFrame = startedAt;
+    let lastSpawn = startedAt;
+    let rafId = 0;
+
+    const tick = (now: number) => {
+      if (phaseRef.current !== 'playing') return;
+
+      const elapsedMs = now - startedAt;
+      const remainingSeconds = Math.max(
+        0,
+        Math.ceil((durationMs - elapsedMs) / 1000)
+      );
+      setTimeLeft((prev) =>
+        prev === remainingSeconds ? prev : remainingSeconds
+      );
+
+      if (elapsedMs >= durationMs) {
+        phaseRef.current = 'lost';
+        setPhase('lost');
+        setSigils([]);
+        return;
+      }
+
+      const dtSec = Math.min(0.05, Math.max(0.001, (now - lastFrame) / 1000));
+      lastFrame = now;
+
+      const shouldSpawn = now - lastSpawn >= 720;
+      if (shouldSpawn) {
+        lastSpawn = now;
+      }
+
+      setSigils((prev) => {
+        const moved: FallingSigil[] = [];
+        for (const item of prev) {
+          const nextY = item.yPct + item.speedPctPerSec * dtSec;
+          if (nextY <= 108) {
+            moved.push({ ...item, yPct: nextY });
+          }
+        }
+        if (shouldSpawn && moved.length < 7) {
+          const id = nextIdRef.current++;
+          moved.push({
+            id,
+            xPct: 10 + Math.random() * 80,
+            yPct: -8,
+            speedPctPerSec: 23 + Math.random() * 11,
+            variant: id % 2 === 0 ? 'champagne' : 'amethyst',
+          });
+        }
+        return moved;
+      });
+
+      rafId = window.requestAnimationFrame(tick);
+    };
+
+    rafId = window.requestAnimationFrame(tick);
+    return () => window.cancelAnimationFrame(rafId);
+  }, [open, phase, runKey]);
+
+  const handleCatchSigil = useCallback(
+    (
+      sigilId: number,
+      xPct: number,
+      yPct: number,
+      variant: 'amethyst' | 'champagne'
+    ) => {
+      if (phaseRef.current !== 'playing') return;
+
+      setSigils((prev) => prev.filter((item) => item.id !== sigilId));
+
+      const rippleId = nextIdRef.current++;
+      setRipples((prev) => [...prev, { id: rippleId, xPct, yPct, variant }]);
+      const cleanupId = window.setTimeout(() => {
+        setRipples((prev) => prev.filter((r) => r.id !== rippleId));
+      }, 550);
+      rippleTimersRef.current.push(cleanupId);
+
+      const nextScore = Math.min(100, scoreRef.current + 10);
+      scoreRef.current = nextScore;
+      setScore(nextScore);
+
+      if (nextScore >= 100) {
+        phaseRef.current = 'won';
+        setPhase('won');
+        setSigils([]);
+      }
+    },
+    []
+  );
+
+  if (!open) return null;
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={copy.hudLabel}
+      className="fixed inset-0 z-50 flex flex-col overflow-hidden bg-[#040508] text-white select-none"
+    >
+      {/* Reuse exact Obsidian + Liquid Glass Veil backdrop across both mobile and desktop */}
+      <AmbientLiquidGlassBackdrop />
+
+      {/* Top HUD Bar */}
+      <header className="relative z-20 flex h-14 shrink-0 items-center justify-between gap-3 border-b border-violet-400/15 bg-[#040508]/80 px-4 backdrop-blur-2xl sm:px-8">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <AtriumEmblem />
+          <span className="truncate font-mono text-[10px] tracking-[0.16em] text-zinc-300 sm:text-xs">
+            {copy.hudLabel}
+          </span>
+        </div>
+
+        <div className="flex shrink-0 items-center gap-2.5 sm:gap-3">
+          <div className="inline-flex items-center gap-1.5 rounded-full border border-[#e5cca0]/35 bg-[#e5cca0]/10 px-3 py-1 font-mono text-[11px] font-semibold text-[#e5cca0]">
+            <span className="hidden text-zinc-400 sm:inline">
+              {copy.scoreLabel}
+            </span>
+            <span>{score} / 100</span>
+          </div>
+
+          <div
+            className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 font-mono text-[11px] font-semibold ${
+              timeLeft <= 5 && phase === 'playing'
+                ? 'border-amber-400/45 bg-amber-500/15 text-amber-200'
+                : 'border-violet-400/25 bg-white/[0.04] text-zinc-200'
+            }`}
+          >
+            <span className="hidden text-zinc-400 sm:inline">
+              {copy.timeLabel}
+            </span>
+            <span>{timeLeft}s</span>
+          </div>
+
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label={copy.closeAriaLabel}
+            className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-zinc-300 transition hover:border-violet-400/45 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#a78bfa]"
+          >
+            <X className="h-4 w-4" aria-hidden="true" />
+          </button>
+        </div>
+      </header>
+
+      {/* Main Interactive Arena or Unlocked Chronicle */}
+      {phase === 'playing' ? (
+        <div className="relative z-10 flex-1 touch-none overflow-hidden">
+          <div className="pointer-events-none absolute inset-x-0 top-5 z-10 flex justify-center px-4 text-center">
+            <span className="rounded-full border border-white/10 bg-[#090a10]/75 px-4 py-1.5 font-mono text-[11px] tracking-wide text-zinc-300 backdrop-blur-xl">
+              {copy.hintLabel}
+            </span>
+          </div>
+
+          {sigils.map((sigil) => (
+            <button
+              key={sigil.id}
+              type="button"
+              onPointerDown={(e) => {
+                e.stopPropagation();
+                handleCatchSigil(
+                  sigil.id,
+                  sigil.xPct,
+                  sigil.yPct,
+                  sigil.variant
+                );
+              }}
+              aria-label="Catch Atrium crystal sigil"
+              className="absolute flex h-16 w-16 -translate-x-1/2 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full focus-visible:outline-2 focus-visible:outline-[#e5cca0]"
+              style={{
+                left: `${sigil.xPct}%`,
+                top: `${sigil.yPct}%`,
+              }}
+            >
+              <CrystalSigilGlyph variant={sigil.variant} uid={sigil.id} />
+            </button>
+          ))}
+
+          {ripples.map((ripple) => (
+            <div
+              key={ripple.id}
+              aria-hidden="true"
+              className="pointer-events-none absolute"
+              style={{
+                left: `${ripple.xPct}%`,
+                top: `${ripple.yPct}%`,
+              }}
+            >
+              <div
+                className={`h-16 w-16 rounded-full border-2 ${
+                  ripple.variant === 'champagne'
+                    ? 'border-[#e5cca0]/80 shadow-[0_0_24px_rgba(229,204,160,0.45)]'
+                    : 'border-[#a78bfa]/85 shadow-[0_0_24px_rgba(139,92,246,0.5)]'
+                }`}
+                style={{
+                  animation: 'crystalRipple 520ms ease-out forwards',
+                }}
+              />
+              <span
+                className={`absolute -top-6 left-1/2 -translate-x-1/2 font-mono text-xs font-semibold ${
+                  ripple.variant === 'champagne'
+                    ? 'text-[#e5cca0]'
+                    : 'text-[#c4b5fd]'
+                }`}
+              >
+                +10
+              </span>
+            </div>
+          ))}
+        </div>
+      ) : phase === 'lost' ? (
+        <div className="relative z-10 flex flex-1 items-center justify-center overflow-y-auto p-6">
+          <div
+            className={`relative w-full max-w-md overflow-hidden rounded-[28px] p-7 text-center sm:p-9 ${SMOKED_GLASS_SURFACE}`}
+          >
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-x-10 top-0 h-[1px] bg-gradient-to-r from-transparent via-[#a78bfa]/60 to-[#e5cca0]/45"
+            />
+
+            <p className="font-mono text-[11px] tracking-[0.18em] text-[#a78bfa]">
+              {copy.lostEyebrow}
+            </p>
+            <h2 className="font-display mt-3 text-2xl font-semibold tracking-tight text-white sm:text-3xl">
+              {copy.lostTitle}
+            </h2>
+            <p className="mt-2 font-mono text-sm font-semibold text-[#e5cca0]">
+              {score} / 100
+            </p>
+            <p className="mt-3 text-sm leading-relaxed text-[#a1a1aa]">
+              {copy.lostSubtitle}
+            </p>
+
+            <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-center">
+              <button
+                type="button"
+                onClick={onClose}
+                className={`inline-flex min-h-[44px] cursor-pointer items-center justify-center rounded-full px-5 py-2 text-xs font-medium transition ${SECONDARY_GLASS_BUTTON}`}
+              >
+                {copy.closeButton}
+              </button>
+              <button
+                type="button"
+                onClick={startFreshRun}
+                className={`inline-flex min-h-[44px] cursor-pointer items-center justify-center rounded-full px-6 py-2 text-xs font-semibold transition ${PRIMARY_ALABASTER_BUTTON}`}
+              >
+                {copy.retryButton}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="relative z-10 flex-1 overflow-y-auto px-4 py-8 sm:px-6 sm:py-12">
+          <article className="relative mx-auto max-w-3xl overflow-hidden rounded-[28px] border border-violet-400/25 bg-[#090a10]/90 p-6 shadow-[inset_0_1px_0_0_rgba(229,204,160,0.28),0_24px_80px_rgba(0,0,0,0.8)] backdrop-blur-2xl select-text sm:p-10">
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-x-12 top-0 h-[1px] bg-gradient-to-r from-transparent via-[#e5cca0]/65 to-[#a78bfa]/55"
+            />
+
+            <div className="relative z-10 flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="font-mono text-[11px] tracking-[0.18em] text-[#e5cca0]">
+                  {copy.wonEyebrow}
+                </p>
+                <h2 className="font-display mt-2 text-balance text-2xl font-semibold tracking-tight text-white sm:text-3xl">
+                  {copy.wonTitle}
+                </h2>
+              </div>
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-violet-400/25 bg-white/[0.04]">
+                <DoubleArchEmblem
+                  idPrefix="secret-chronicle"
+                  className="h-8 w-7 shrink-0 overflow-visible"
+                />
+              </div>
+            </div>
+
+            <p className="relative z-10 mt-3 text-sm leading-relaxed text-zinc-300 sm:text-base">
+              {copy.wonSubtitle}
+            </p>
+
+            <div className="relative z-10 mt-7 space-y-5">
+              {copy.questions.map((item, idx) => (
+                <section
+                  key={item.question}
+                  className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 sm:p-6"
+                >
+                  <div className="flex items-start gap-3">
+                    <span className="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-[#e5cca0]/35 bg-[#e5cca0]/10 font-mono text-[11px] font-semibold text-[#e5cca0]">
+                      0{idx + 1}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <h3 className="font-display text-base font-semibold tracking-tight text-white sm:text-lg">
+                        {item.question}
+                      </h3>
+                      <p className="mt-2.5 text-sm leading-relaxed text-zinc-300">
+                        {item.answer}
+                      </p>
+                    </div>
+                  </div>
+                </section>
+              ))}
+            </div>
+
+            <div className="relative z-10 mt-8 flex flex-col-reverse gap-3 border-t border-white/10 pt-6 sm:flex-row sm:items-center sm:justify-end">
+              <button
+                type="button"
+                onClick={startFreshRun}
+                className={`inline-flex min-h-[44px] cursor-pointer items-center justify-center rounded-full px-5 py-2 text-xs font-medium transition ${SECONDARY_GLASS_BUTTON}`}
+              >
+                {copy.playAgainButton}
+              </button>
+              <button
+                type="button"
+                onClick={onClose}
+                className={`inline-flex min-h-[44px] cursor-pointer items-center justify-center rounded-full px-6 py-2 text-xs font-semibold transition ${PRIMARY_ALABASTER_BUTTON}`}
+              >
+                {copy.returnButton}
+              </button>
+            </div>
+          </article>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function LandingShell({ onEnterApp }: LandingShellProps) {
   const [lang, setLang] = useState<LandingLang>('en');
   const [videoError, setVideoError] = useState<boolean>(false);
   const [pendingDownloadTarget, setPendingDownloadTarget] =
     useState<PendingDownloadTarget | null>(null);
+  const [secretChronicleOpen, setSecretChronicleOpen] =
+    useState<boolean>(false);
+  const brandClicksRef = useRef<number[]>([]);
   const [reducedMotion] = useState<boolean>(() => prefersReducedMotion());
   const [introStage, setIntroStage] = useState<0 | 1 | 2>(() =>
     prefersReducedMotion() ? 2 : 0
@@ -989,7 +1815,28 @@ export function LandingShell({ onEnterApp }: LandingShellProps) {
     () => !prefersReducedMotion()
   );
   const [entered, setEntered] = useState<boolean>(() => prefersReducedMotion());
-  const copy = LANDING_COPY[lang];
+  const latestReleaseTag = useLatestAtriumRelease();
+  const copy = useMemo(
+    () =>
+      applyReleaseVersionToCopy(LANDING_COPY[lang], lang, latestReleaseTag),
+    [lang, latestReleaseTag]
+  );
+
+  const handleBrandSecretClick = useCallback(
+    (event: React.MouseEvent<HTMLAnchorElement>) => {
+      const now = Date.now();
+      const recent = brandClicksRef.current.filter((ts) => now - ts <= 2000);
+      recent.push(now);
+      brandClicksRef.current = recent;
+
+      if (recent.length >= 3) {
+        event.preventDefault();
+        brandClicksRef.current = [];
+        setSecretChronicleOpen(true);
+      }
+    },
+    []
+  );
 
   useEffect(() => {
     document.documentElement.lang = lang;
@@ -1169,34 +2016,15 @@ export function LandingShell({ onEnterApp }: LandingShellProps) {
         </div>
       ) : null}
 
-      {/* Ultra-Diffused Calm Liquid Glass Ambient Veil (Desktop >= 640px, Static Clean Obsidian on Mobile) */}
-      <div
-        aria-hidden="true"
-        className="pointer-events-none fixed inset-0 z-0 hidden overflow-hidden sm:block"
-      >
-        <div
-          className="absolute top-0 left-0 h-[62vh] w-[72vw] rounded-full opacity-[0.11] blur-[160px]"
-          style={{
-            background:
-              'linear-gradient(135deg, #8b5cf6 0%, #38bdf8 55%, #f59e0b 100%)',
-            animation: 'landingVeilDriftA 38s ease-in-out infinite alternate',
-          }}
-        />
-        <div
-          className="absolute top-0 left-0 h-[62vh] w-[72vw] rounded-full opacity-[0.11] blur-[160px]"
-          style={{
-            background:
-              'linear-gradient(225deg, #38bdf8 0%, #8b5cf6 52%, #f59e0b 100%)',
-            animation: 'landingVeilDriftB 38s ease-in-out infinite alternate',
-          }}
-        />
-      </div>
+      {/* Ultra-Diffused Calm Liquid Glass Ambient Veil across both mobile (< 640px) and desktop */}
+      <AmbientLiquidGlassBackdrop />
 
       {/* 1. Minimal Sticky Smoked Optical Liquid Glass Navbar */}
       <header className="sticky top-0 z-40 h-14 border-b border-violet-400/15 bg-[#040508]/80 backdrop-blur-2xl">
         <div className="mx-auto flex h-full max-w-6xl items-center justify-between gap-4 px-6 sm:gap-8">
           <a
             href="#vision"
+            onClick={handleBrandSecretClick}
             className="flex shrink-0 items-center gap-2.5 whitespace-nowrap text-white transition-opacity hover:opacity-85 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#e5cca0]"
           >
             <AtriumEmblem />
@@ -2141,7 +2969,7 @@ export function LandingShell({ onEnterApp }: LandingShellProps) {
           </article>
         </section>
 
-        {/* 5. #launch-demo — Clean Bottom CTA + Windows v1.5.0 Downloads */}
+        {/* 5. #launch-demo — Clean Bottom CTA + Windows Desktop Downloads */}
         <section
           id="launch-demo"
           className="mx-auto max-w-6xl scroll-mt-16 border-t border-white/10 px-6 py-14 sm:py-20"
@@ -2217,7 +3045,15 @@ export function LandingShell({ onEnterApp }: LandingShellProps) {
 
       <footer className="relative z-10 border-t border-white/10 px-6 py-8">
         <div className="mx-auto flex max-w-6xl flex-col items-start justify-between gap-3 font-mono text-xs text-zinc-400 sm:flex-row sm:items-center">
-          <span>{copy.footer.copyright}</span>
+          <span className="inline-flex items-center gap-2">
+            <span>{copy.footer.copyright}</span>
+            <button
+              type="button"
+              onClick={() => setSecretChronicleOpen(true)}
+              aria-label={copy.footer.secretAriaLabel}
+              className="h-1.5 w-1.5 cursor-pointer rounded-full bg-[#e5cca0]/45 shadow-[0_0_8px_rgba(229,204,160,0.55)] transition hover:scale-150 hover:bg-[#e5cca0] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#e5cca0]"
+            />
+          </span>
           <span>{copy.footer.license}</span>
         </div>
       </footer>
@@ -2226,6 +3062,12 @@ export function LandingShell({ onEnterApp }: LandingShellProps) {
         target={pendingDownloadTarget}
         copy={copy.downloadModal}
         onClose={() => setPendingDownloadTarget(null)}
+      />
+
+      <SecretChronicleOverlay
+        open={secretChronicleOpen}
+        copy={copy.secretGame}
+        onClose={() => setSecretChronicleOpen(false)}
       />
     </div>
   );
