@@ -105,3 +105,9 @@ Aplicada simultáneamente mediante `<meta>` (`index.html`) y cabeceras HTTP en `
 
 ## Reportar una Vulnerabilidad
 Si descubres un problema de seguridad en Atrium, repórtalo de forma privada mediante GitHub Security Advisories (`Security > Advisories > Report a vulnerability`) en lugar de abrir un issue público.
+
+## 🛡️ Mobile Link & Network Hardening (v1.5.1)
+- **Ephemeral 24-Byte Pairing Token & HttpOnly Cookie:** Every Mobile Link session requires a cryptographically random 24-byte ml_token exchanged for a SameSite=Strict; HttpOnly session cookie.
+- **Physical Device Deduplication (deviceId):** Active SSE clients are tracked per unique ephemeral deviceId, preventing connection inflation and enforcing clean session accounting.
+- **Multi-Mesh VPN Isolation (Tailscale, ZeroTier, NetBird, WireGuard):** Native detection of encrypted mesh virtual interfaces alongside active user advisories against unencrypted public Wi-Fi (AP Isolation / LAN sniffing risks).
+- **Double-Layer CSP & SSRF Guards:** Strict Content Security Policy headers on both Desktop (ile://) and Mobile Link HTTP responses, with strict localhost/LAN allowlisting on proxy endpoints.
