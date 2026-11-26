@@ -54,6 +54,7 @@ export const DEFAULT_VISUAL_STUDIO_SETTINGS: VisualStudioSettings = {
   fontFamily: 'sans',
   textSize: 'md',
   glassOpacity: 66,
+  lobbyBackdropMode: 'orbital-clouds',
 };
 
 export const DEFAULT_DIALOGUE_COLOR = '#F1F5F9';
@@ -346,9 +347,29 @@ export function getThemeCssVariables(
     ? visualSettings.customActionColor
     : DEFAULT_USER_ACTION_COLOR;
 
+  const accentPrimary = hasCustomUser
+    ? visualSettings.customUserBubbleColor!
+    : themeId === 'obsidian-violet'
+      ? '#8b5cf6'
+      : palette.vars.accent;
+
+  const accentGlow = hasCustomUser
+    ? visualSettings.customUserBubbleColor!
+    : palette.orbColors[0];
+
+  const uiFontScale =
+    visualSettings.textSize === 'sm'
+      ? '0.92'
+      : visualSettings.textSize === 'lg'
+        ? '1.08'
+        : visualSettings.textSize === 'xl'
+          ? '1.16'
+          : '1';
+
   return {
     '--theme-bg': palette.vars.bg,
     '--theme-panel-bg': palette.vars.panelBg,
+    '--theme-panel': palette.vars.panelBg,
     '--theme-glass': palette.vars.glass,
     '--theme-glass-hover': palette.vars.glassHover,
     '--theme-glass-strong': palette.vars.glassStrong,
@@ -359,6 +380,8 @@ export function getThemeCssVariables(
     '--theme-orb-2': palette.orbColors[1],
     '--theme-orb-3': palette.orbColors[2],
     '--theme-accent': palette.vars.accent,
+    '--accent-primary': accentPrimary,
+    '--accent-glow': accentGlow,
     '--theme-accent-hover': palette.vars.accentHover,
     '--theme-accent-soft': palette.vars.accentSoft,
     '--theme-on-accent': palette.vars.onAccent,
@@ -371,8 +394,10 @@ export function getThemeCssVariables(
     '--bubble-assistant-bg': assistantBg,
     '--bubble-assistant-border': assistantBorder,
     '--chat-glass-blur': `${blurPx}px`,
+    '--app-glass-blur': `${blurPx}px`,
     '--chat-font-family': fontStack,
     '--chat-font-size': textSize,
+    '--ui-font-scale': uiFontScale,
     '--chat-dialogue-color': dialogueColor,
     '--chat-action-color': assistantActionColor,
     '--chat-user-action-color': userActionColor,

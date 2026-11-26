@@ -103,10 +103,13 @@ export type ChatFontFamily = 'sans' | 'serif' | 'mono';
 
 export type ChatTextSize = 'sm' | 'md' | 'lg' | 'xl';
 
+export type LobbyBackdropMode = 'orbital-clouds' | 'obsidian-static';
+
 export interface VisualStudioSettings {
   fontFamily: ChatFontFamily;
   textSize: ChatTextSize;
   glassOpacity: number;
+  lobbyBackdropMode?: LobbyBackdropMode;
   customUserBubbleColor?: string;
   customDialogueColor?: string;
   customActionColor?: string;
@@ -134,6 +137,7 @@ export interface MobileLinkStatus {
 
 export interface MobileSyncPreferences {
   activeCharacterId?: string;
+  characterOrder?: string[];
   userPersona?: UserPersona;
   themeId?: ThemeId;
   bubbleSchemeId?: BubbleSchemeId;

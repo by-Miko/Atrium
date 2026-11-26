@@ -153,6 +153,7 @@ export function ChatWindow({
   const [voiceError, setVoiceError] = useState<string | null>(null);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editingDraft, setEditingDraft] = useState('');
+  const [isPortraitWallpaper, setIsPortraitWallpaper] = useState(false);
   const [isMobileViewport, setIsMobileViewport] = useState<boolean>(() =>
     typeof window !== 'undefined'
       ? window.matchMedia('(max-width: 639px)').matches
@@ -162,6 +163,7 @@ export function ChatWindow({
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const wallpaperImgRef = useRef<HTMLImageElement | null>(null);
   const voiceBaseDraftRef = useRef('');
   const pendingNativeDictationRef = useRef(false);
   const sceneMenuRef = useRef<HTMLDivElement | null>(null);
@@ -234,9 +236,19 @@ export function ChatWindow({
   const safeCharacterRole = sanitizeRenderedText(character.role);
   const safeSelectedModel = sanitizeRenderedText(selectedModel);
 
+  const updateWallpaperAspect = useCallback((img: HTMLImageElement | null) => {
+    if (!img || img.naturalWidth <= 0 || img.naturalHeight <= 0) {
+      setIsPortraitWallpaper(false);
+      return;
+    }
+    const naturalAspect = img.naturalWidth / img.naturalHeight;
+    setIsPortraitWallpaper(naturalAspect < 1.05);
+  }, []);
+
   useEffect(() => {
     setWallpaperFailed(false);
     setAvatarFailed(false);
+    setIsPortraitWallpaper(false);
     setParallaxY(0);
     setVoiceError(null);
     setEditingMessageId(null);
@@ -253,6 +265,13 @@ export function ChatWindow({
     character.wallpaperUrl,
     stopListening,
   ]);
+
+  useEffect(() => {
+    const img = wallpaperImgRef.current;
+    if (img && img.complete && img.naturalWidth > 0) {
+      updateWallpaperAspect(img);
+    }
+  }, [activeWallpaper, character.id, updateWallpaperAspect]);
 
   useEffect(() => {
     if (!hideBubbles && !editingMessageId) {
@@ -616,18 +635,44 @@ export function ChatWindow({
                 transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
                 className="relative m-0 h-full w-full p-0"
               >
+                {isPortraitWallpaper ? (
+                  <>
+                    <img
+                      src={activeWallpaper}
+                      alt=""
+                      aria-hidden="true"
+                      referrerPolicy="no-referrer"
+                      className="hidden sm:block absolute inset-0 w-full h-full object-cover scale-110 blur-3xl opacity-45 saturate-125 pointer-events-none"
+                    />
+                    <div
+                      aria-hidden="true"
+                      className="hidden sm:block pointer-events-none absolute inset-0"
+                      style={{
+                        background:
+                          'linear-gradient(to bottom, color-mix(in srgb, var(--accent-primary, #8b5cf6) 14%, rgba(5, 5, 7, 0.58)) 0%, rgba(5, 5, 7, 0.45) 50%, rgba(5, 5, 7, 0.78) 100%)',
+                      }}
+                    />
+                  </>
+                ) : null}
                 <img
                   key={character.id}
+                  ref={wallpaperImgRef}
                   src={activeWallpaper}
                   alt=""
                   referrerPolicy="no-referrer"
-                  onError={() => setWallpaperFailed(true)}
-                  className={`m-0 block h-full w-full p-0 transition-transform duration-200 ease-out will-change-transform ${
+                  onLoad={(event) => updateWallpaperAspect(event.currentTarget)}
+                  onError={() => {
+                    setWallpaperFailed(true);
+                    setIsPortraitWallpaper(false);
+                  }}
+                  className={`relative z-10 m-0 block h-full w-full p-0 transition-transform duration-200 ease-out will-change-transform ${
                     wallpaperFit === 'contain'
                       ? 'object-contain object-center'
                       : hasDedicatedStage
                         ? 'object-cover object-[64%_top] sm:object-[70%_center] lg:object-center'
-                        : 'object-cover object-top sm:object-[70%_22%]'
+                        : isPortraitWallpaper
+                          ? 'object-cover object-top sm:object-contain sm:object-center'
+                          : 'object-cover object-top sm:object-[70%_22%]'
                   }`}
                   style={{
                     ...(isMobileViewport &&
@@ -636,7 +681,10 @@ export function ChatWindow({
                       ? { objectPosition: '82% top' }
                       : {}),
                     ...(parallaxEnabled
-                      ? wallpaperFit === 'contain'
+                      ? wallpaperFit === 'contain' ||
+                        (!isMobileViewport &&
+                          !hasDedicatedStage &&
+                          isPortraitWallpaper)
                         ? {
                             transformOrigin: 'center center',
                             transform: `translate3d(0, ${Math.round(parallaxY * 0.4)}px, 0) scale(1.015)`,
@@ -1148,38 +1196,11 @@ export function ChatWindow({
                     isEditingThis ? 'w-full sm:w-[76%]' : ''
                   } ${
                     isUser
-                      ? 'rounded-2xl border-white/15 bg-[#0c0c12]/80 px-4 py-3 text-[#F1F5F9] shadow-lg sm:rounded-3xl sm:rounded-br-md sm:bg-transparent sm:shadow-none'
+                      ? 'chat-bubble-user rounded-2xl px-4 py-3 text-[#F1F5F9] shadow-lg sm:rounded-3xl sm:rounded-br-md'
                       : message.isError
                         ? 'rounded-2xl border-rose-500/35 bg-rose-950/85 px-4 py-3 text-rose-100 shadow-lg sm:rounded-3xl sm:rounded-bl-md sm:bg-rose-950/65 sm:px-4 sm:py-3.5 sm:shadow-[0_10px_34px_rgba(0,0,0,0.45)] sm:backdrop-blur-xl'
-                        : 'rounded-2xl border-white/15 bg-[#0c0c12]/80 px-4 py-3 text-[#F1F5F9] shadow-lg sm:rounded-3xl sm:rounded-bl-md sm:bg-transparent sm:py-3.5 sm:shadow-none'
+                        : 'chat-bubble-assistant rounded-2xl px-4 py-3 text-[#F1F5F9] shadow-lg sm:rounded-3xl sm:rounded-bl-md sm:py-3.5'
                   }`}
-                  style={
-                    isMobileViewport
-                      ? undefined
-                      : isUser
-                        ? {
-                            backgroundColor: 'var(--bubble-user-bg)',
-                            borderColor: 'var(--bubble-user-border)',
-                            backdropFilter:
-                              'blur(var(--chat-glass-blur, 20px)) saturate(160%)',
-                            WebkitBackdropFilter:
-                              'blur(var(--chat-glass-blur, 20px)) saturate(160%)',
-                            boxShadow:
-                              'inset 0 1px 1px rgba(255, 255, 255, 0.2), 0 8px 32px rgba(0, 0, 0, 0.3)',
-                          }
-                        : !message.isError
-                          ? {
-                              backgroundColor: 'var(--bubble-assistant-bg)',
-                              borderColor: 'var(--bubble-assistant-border)',
-                              backdropFilter:
-                                'blur(var(--chat-glass-blur, 20px)) saturate(160%)',
-                              WebkitBackdropFilter:
-                                'blur(var(--chat-glass-blur, 20px)) saturate(160%)',
-                              boxShadow:
-                                'inset 0 1px 1px rgba(255, 255, 255, 0.2), 0 8px 32px rgba(0, 0, 0, 0.3)',
-                            }
-                          : undefined
-                  }
                 >
                   {!isUser ? (
                     <div className="mb-1.5 flex items-center justify-between gap-3 text-xs text-[var(--theme-muted)]">

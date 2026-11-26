@@ -42,6 +42,7 @@ import type {
   ChatFontFamily,
   ChatTextSize,
   Language,
+  LobbyBackdropMode,
   OllamaModelTag,
   OllamaSettings,
   ThemeId,
@@ -1427,7 +1428,10 @@ export function SettingsModal({
                   className="relative overflow-hidden rounded-2xl border border-[rgba(255,255,255,0.12)] p-4"
                   style={{
                     background:
-                      'radial-gradient(circle at 20% 20%, var(--theme-accent-soft), transparent 54%), radial-gradient(circle at 80% 75%, var(--theme-accent-soft), transparent 58%), var(--theme-bg)',
+                      (visualSettings.lobbyBackdropMode ?? 'orbital-clouds') ===
+                      'obsidian-static'
+                        ? '#050507'
+                        : 'radial-gradient(circle at 20% 20%, color-mix(in srgb, var(--accent-primary, #8b5cf6) 20%, transparent), transparent 54%), radial-gradient(circle at 80% 75%, color-mix(in srgb, var(--accent-glow, #6d28d9) 18%, transparent), transparent 58%), #050507',
                   }}
                 >
                   <div className="mb-3 flex items-center justify-between text-[11px] font-medium text-[var(--theme-muted)]">
@@ -1525,6 +1529,80 @@ export function SettingsModal({
                             <div className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-[var(--theme-muted)]">
                               {meta.subtitle}
                             </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Lobby Ambient Backdrop Selector (Orbital Liquid Clouds vs Classic Obsidian Static) */}
+                <div>
+                  <span className="mb-2.5 block text-xs font-medium text-white/85">
+                    {t.lobbyBackdropLabel}
+                  </span>
+                  <div className="grid gap-2.5 sm:grid-cols-2">
+                    {(
+                      [
+                        {
+                          mode: 'orbital-clouds' as LobbyBackdropMode,
+                          title: t.lobbyBackdropOrbitalTitle,
+                          badge: t.lobbyBackdropOrbitalBadge,
+                          subtitle: t.lobbyBackdropOrbitalSubtitle,
+                          previewBg:
+                            'radial-gradient(circle at 30% 35%, color-mix(in srgb, var(--accent-primary, #8b5cf6) 42%, transparent) 0%, transparent 65%), #050507',
+                        },
+                        {
+                          mode: 'obsidian-static' as LobbyBackdropMode,
+                          title: t.lobbyBackdropStaticTitle,
+                          badge: t.lobbyBackdropStaticBadge,
+                          subtitle: t.lobbyBackdropStaticSubtitle,
+                          previewBg: '#050507',
+                        },
+                      ] as const
+                    ).map((opt) => {
+                      const activeMode =
+                        visualSettings.lobbyBackdropMode ?? 'orbital-clouds';
+                      const isSelected = activeMode === opt.mode;
+                      return (
+                        <button
+                          key={opt.mode}
+                          type="button"
+                          aria-pressed={isSelected}
+                          onClick={() =>
+                            onChangeVisualSettings({
+                              ...visualSettings,
+                              lobbyBackdropMode: opt.mode,
+                            })
+                          }
+                          className={`flex items-start gap-3 rounded-2xl border p-3.5 text-left transition-all duration-300 focus-visible:outline-2 focus-visible:outline-[var(--theme-accent)] ${
+                            isSelected
+                              ? 'border-[var(--theme-accent)] bg-[var(--theme-accent-soft)] shadow-[inset_0_1px_0_rgba(255,255,255,0.14)]'
+                              : 'border-[rgba(255,255,255,0.12)] bg-[var(--theme-glass)] hover:border-white/25 hover:bg-[var(--theme-glass-hover)]'
+                          }`}
+                        >
+                          <span
+                            aria-hidden="true"
+                            className="mt-0.5 h-8 w-8 shrink-0 rounded-xl border border-white/15"
+                            style={{ background: opt.previewBg }}
+                          />
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="flex min-w-0 items-center gap-1.5">
+                                <span className="truncate font-display text-xs font-semibold text-white">
+                                  {opt.title}
+                                </span>
+                                <span className="shrink-0 rounded-md border border-white/12 bg-black/35 px-1.5 py-0.5 font-mono text-[10px] text-white/70">
+                                  {opt.badge}
+                                </span>
+                              </div>
+                              {isSelected ? (
+                                <Check className="h-4 w-4 shrink-0 text-[var(--theme-accent)]" />
+                              ) : null}
+                            </div>
+                            <p className="mt-1 text-[11px] leading-snug text-[var(--theme-muted)]">
+                              {opt.subtitle}
+                            </p>
                           </div>
                         </button>
                       );

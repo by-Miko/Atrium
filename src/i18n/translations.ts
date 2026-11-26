@@ -104,6 +104,13 @@ export interface UIStrings {
   glassOpacitySheer: string;
   glassOpacityBalanced: string;
   glassOpacitySolid: string;
+  lobbyBackdropLabel: string;
+  lobbyBackdropOrbitalTitle: string;
+  lobbyBackdropOrbitalBadge: string;
+  lobbyBackdropOrbitalSubtitle: string;
+  lobbyBackdropStaticTitle: string;
+  lobbyBackdropStaticBadge: string;
+  lobbyBackdropStaticSubtitle: string;
   providerLabel: string;
   providerOllamaLabel: string;
   providerOpenAILabel: string;
@@ -190,6 +197,10 @@ export interface UIStrings {
   importCharacterCardButton: string;
   importCharacterCardShort: string;
   importCharacterCardSuccess: (name: string) => string;
+  exportCharacterCardButton: string;
+  exportCharacterCardSuccess: (fileName: string) => string;
+  characterCardSubtitle: string;
+  iosCardImportTip: string;
   setupHelperTitle: string;
   setupHelperSubtitle: (url: string) => string;
   setupStep1Title: string;
@@ -450,6 +461,15 @@ export const TRANSLATIONS: Record<Language, UIStrings> = {
     glassOpacitySheer: 'Sheer (20%)',
     glassOpacityBalanced: 'Balanced (66%)',
     glassOpacitySolid: 'Frosted (95%)',
+    lobbyBackdropLabel: 'Lobby Ambient Backdrop',
+    lobbyBackdropOrbitalTitle: 'Orbital Liquid Clouds',
+    lobbyBackdropOrbitalBadge: 'v1.5.2',
+    lobbyBackdropOrbitalSubtitle:
+      'Rotating amethyst & obsidian radial clouds drifting behind the gallery.',
+    lobbyBackdropStaticTitle: 'Classic Obsidian Static',
+    lobbyBackdropStaticBadge: 'v1.5.1',
+    lobbyBackdropStaticSubtitle:
+      'Pure static #050507 obsidian backdrop with zero moving orbs.',
     providerLabel: 'Inference Engine / API Provider',
     providerOllamaLabel: 'Ollama Local',
     providerOpenAILabel: 'OpenAI-Compatible API',
@@ -557,7 +577,14 @@ export const TRANSLATIONS: Record<Language, UIStrings> = {
     importCharacterCardButton: 'Import Character Card (.png)',
     importCharacterCardShort: 'Import .png',
     importCharacterCardSuccess: (name) =>
-      `Loaded "${name}" from PNG character card metadata.`,
+      `Loaded "${name}" from character card metadata.`,
+    exportCharacterCardButton: 'Export Card (.png)',
+    exportCharacterCardSuccess: (fileName) =>
+      `Exported "${fileName}" as a TavernAI V2 character card.`,
+    characterCardSubtitle:
+      'Reads V2/V3 PNG ("chara" / "ccv3") or standalone .json cards',
+    iosCardImportTip:
+      'On iPhone, pick from Choose File (Files / iCloud) rather than Photo Library, because Apple Photos strips embedded PNG character metadata.',
     setupHelperTitle: 'Connect Local Ollama',
     setupHelperSubtitle: (url) =>
       `Atrium runs locally in your browser and could not reach Ollama at ${url} yet. Follow these steps to start Ollama with browser access enabled:`,
@@ -635,7 +662,7 @@ export const TRANSLATIONS: Record<Language, UIStrings> = {
     outroSessionSaved: 'Session saved locally in Atrium',
     outroCraftedBy: 'Crafted by Miko',
     reopenAtrium: 'Reopen Atrium',
-    appVersion: 'v1.5.1 (Hardened)',
+    appVersion: 'v1.5.2 (Hardened)',
     settingsWatermark: 'Atrium Engine • Original Architecture by Miko',
     ollamaStatusChecking: 'Ollama...',
     ollamaStatusReady: 'Ollama Ready',
@@ -886,6 +913,15 @@ export const TRANSLATIONS: Record<Language, UIStrings> = {
     glassOpacitySheer: 'Traslúcido (20%)',
     glassOpacityBalanced: 'Equilibrado (66%)',
     glassOpacitySolid: 'Esmerilado (95%)',
+    lobbyBackdropLabel: 'Fondo Ambiental del Lobby',
+    lobbyBackdropOrbitalTitle: 'Nubes Líquidas Orbitales',
+    lobbyBackdropOrbitalBadge: 'v1.5.2',
+    lobbyBackdropOrbitalSubtitle:
+      'Nubes radiales en amatista y obsidiana orbitando detrás de la galería.',
+    lobbyBackdropStaticTitle: 'Obsidiana Clásico Estático',
+    lobbyBackdropStaticBadge: 'v1.5.1',
+    lobbyBackdropStaticSubtitle:
+      'Fondo obsidiana #050507 puro y estático sin orbes en movimiento.',
     providerLabel: 'Motor de Inferencia / Proveedor API',
     providerOllamaLabel: 'Ollama Local',
     providerOpenAILabel: 'API Compatible OpenAI',
@@ -993,7 +1029,14 @@ export const TRANSLATIONS: Record<Language, UIStrings> = {
     importCharacterCardButton: 'Importar Tarjeta (.png)',
     importCharacterCardShort: 'Importar .png',
     importCharacterCardSuccess: (name) =>
-      `Se cargó "${name}" desde los metadatos de la tarjeta PNG.`,
+      `Se cargó "${name}" desde los metadatos de la tarjeta.`,
+    exportCharacterCardButton: 'Exportar Tarjeta (.png)',
+    exportCharacterCardSuccess: (fileName) =>
+      `Se exportó "${fileName}" como tarjeta TavernAI V2.`,
+    characterCardSubtitle:
+      'Lee tarjetas PNG V2/V3 ("chara" / "ccv3") o archivos .json',
+    iosCardImportTip:
+      'En iPhone, elige desde Seleccionar archivo (Archivos / iCloud) en lugar de Fototeca, porque Fotos de Apple elimina los metadatos PNG del personaje.',
     setupHelperTitle: 'Conecta tu Ollama Local',
     setupHelperSubtitle: (url) =>
       `Atrium se ejecuta localmente en tu navegador y aún no pudo conectar con Ollama en ${url}. Sigue estos pasos para iniciarlo con acceso CORS:`,
@@ -1071,7 +1114,7 @@ export const TRANSLATIONS: Record<Language, UIStrings> = {
     outroSessionSaved: 'Sesión guardada localmente en Atrium',
     outroCraftedBy: 'Crafted by Miko',
     reopenAtrium: 'Reabrir Atrium',
-    appVersion: 'v1.5.1 (Hardened)',
+    appVersion: 'v1.5.2 (Hardened)',
     settingsWatermark: 'Atrium Engine • Original Architecture by Miko',
     ollamaStatusChecking: 'Ollama...',
     ollamaStatusReady: 'Ollama Listo',
