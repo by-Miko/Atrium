@@ -1,5 +1,9 @@
 import type { ApiProvider, OllamaModelTag } from '../types/chat';
+import { DEMO_MODEL_ID, streamDemoRoleplayResponse } from './demoEngine';
 import { getMobileLinkSessionToken } from './mobileSync';
+import { isWebEdition } from './webEnvironment';
+
+export { DEMO_MODEL_ID };
 
 export const DEFAULT_OLLAMA_URL = 'http://localhost:11434';
 export const DEFAULT_OPENAI_URL = 'http://localhost:1234/v1';
@@ -474,12 +478,38 @@ export async function fetchOpenAICompatibleModels(
   return normalized.sort((a, b) => a.name.localeCompare(b.name));
 }
 
+export function shouldUseWebDemoEngine(
+  _provider?: ApiProvider,
+  rawUrl?: string,
+  apiKey?: string
+): boolean {
+  if (!isWebEdition()) {
+    return false;
+  }
+  const hasCustomCloudApi =
+    isPublicHttpsProviderUrl(rawUrl) && Boolean(apiKey?.trim());
+  return !hasCustomCloudApi;
+}
+
 export async function fetchProviderModels(
   provider: ApiProvider,
   rawUrl: string,
   apiKey?: string,
   signal?: AbortSignal
 ): Promise<OllamaModelTag[]> {
+  if (shouldUseWebDemoEngine(provider, rawUrl, apiKey)) {
+    return [
+      {
+        name: DEMO_MODEL_ID,
+        model: DEMO_MODEL_ID,
+        details: {
+          parameter_size: '8B',
+          family: 'Atrium Web Sim',
+          quantization_level: 'Q4_K_M',
+        },
+      },
+    ];
+  }
   if (provider === 'openai') {
     return fetchOpenAICompatibleModels(rawUrl, apiKey, signal);
   }
@@ -488,6 +518,13 @@ export async function fetchProviderModels(
 
 export interface StreamChatStats {
   tokensPerSecond?: number;
+}
+
+export interface StreamChatCharacterContext {
+  name: string;
+  role?: string;
+  bio?: string;
+  systemPrompt?: string;
 }
 
 export interface StreamChatParams {
@@ -499,6 +536,9 @@ export interface StreamChatParams {
   temperature: number;
   numPredict?: number;
   numCtx?: number;
+  characterContext?: StreamChatCharacterContext;
+  isContinue?: boolean;
+  language?: 'en' | 'es';
   signal?: AbortSignal;
   onToken: (token: string) => void;
   onDone?: (stats?: StreamChatStats) => void;
@@ -838,9 +878,75 @@ export async function streamOpenAICompatibleChat({
   }
 }
 
+function extractDemoContextFromMessages(
+  messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>
+): {
+  characterName: string;
+  characterDescription?: string;
+  userMessage: string;
+  isContinue: boolean;
+} {
+  const systemMsg = messages.find((m) => m.role === 'system')?.content ?? '';
+  const nameMatch = systemMsg.match(/You are\s+([^,.\n]+)/i);
+  const characterName = nameMatch?.[1]?.trim() || 'Companion';
+
+  const userMessages = messages.filter((m) => m.role === 'user');
+  const lastUserRaw = userMessages[userMessages.length - 1]?.content ?? '';
+  const isContinue = lastUserRaw
+    .trim()
+    .startsWith('[Continue your immediately preceding response');
+
+  let userMessage = lastUserRaw;
+  if (isContinue && userMessages.length > 1) {
+    userMessage = userMessages[userMessages.length - 2]?.content ?? '';
+  }
+
+  return {
+    characterName,
+    characterDescription: systemMsg || undefined,
+    userMessage,
+    isContinue,
+  };
+}
+
 export async function streamProviderChat(
   params: StreamChatParams
 ): Promise<void> {
+  if (shouldUseWebDemoEngine(params.provider, params.baseUrl, params.apiKey)) {
+    const fallback = extractDemoContextFromMessages(params.messages);
+    let firstTokenTime: number | null = null;
+    let totalChars = 0;
+
+    await streamDemoRoleplayResponse({
+      characterName:
+        params.characterContext?.name ?? fallback.characterName,
+      characterTagline: params.characterContext?.role,
+      characterDescription:
+        params.characterContext?.bio ?? fallback.characterDescription,
+      characterScenario: params.characterContext?.systemPrompt,
+      userMessage: fallback.userMessage,
+      isContinue: params.isContinue ?? fallback.isContinue,
+      language: params.language,
+      signal: params.signal,
+      onToken: (token) => {
+        if (firstTokenTime === null) {
+          firstTokenTime = performance.now();
+        }
+        totalChars += token.length;
+        params.onToken(token);
+      },
+    });
+
+    let tokensPerSecond: number | undefined;
+    if (firstTokenTime !== null && totalChars > 0) {
+      const elapsedSec = Math.max((performance.now() - firstTokenTime) / 1000, 0.1);
+      const approxTokens = Math.max(1, totalChars / 3.8);
+      tokensPerSecond = Math.round((approxTokens / elapsedSec) * 10) / 10;
+    }
+    params.onDone?.({ tokensPerSecond });
+    return;
+  }
+
   if ((params.provider ?? 'ollama') === 'openai') {
     return streamOpenAICompatibleChat(params);
   }
@@ -874,6 +980,24 @@ export async function summarizeConversationMemory({
 }: SummarizeMemoryParams): Promise<string> {
   if (turnsToSummarize.length === 0 || !model.trim()) {
     return existingSummary?.trim() ?? '';
+  }
+
+  if (shouldUseWebDemoEngine(provider, baseUrl, apiKey)) {
+    const userLabel = userName?.trim() || 'User';
+    const recentHighlights = turnsToSummarize
+      .slice(-4)
+      .map(
+        (turn) =>
+          `${turn.role === 'user' ? userLabel : characterName}: ${turn.content
+            .replace(/\*[^*]*\*/g, '')
+            .replace(/\s+/g, ' ')
+            .trim()
+            .slice(0, 110)}`
+      )
+      .filter((line) => line.length > 0)
+      .join(' | ');
+    const prefix = existingSummary?.trim() ? `${existingSummary.trim()} ` : '';
+    return `${prefix}${recentHighlights}`.trim().slice(0, 900);
   }
 
   const userLabel = userName?.trim() || 'User';
