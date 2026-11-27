@@ -23,6 +23,9 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '21'
+            - name: Setup Gradle cache
+        uses: gradle/actions/setup-gradle@v4
+
       - name: Install dependencies & sync Capacitor
         run: |
           npm ci --legacy-peer-deps
