@@ -268,9 +268,22 @@ export function savePocketAiConfig(config: {
 export async function loadInstalledPocketAiModels(): Promise<
   PocketAiLocalModelRecord[]
 > {
-  const saved = await idbGet<PocketAiLocalModelRecord[]>(
+  let saved = await idbGet<PocketAiLocalModelRecord[]>(
     POCKET_AI_MODELS_IDB_KEY
   );
+  if ((!Array.isArray(saved) || saved.length === 0) && typeof window !== 'undefined') {
+    try {
+      const rawLocal = window.localStorage.getItem(POCKET_AI_MODELS_IDB_KEY);
+      if (rawLocal) {
+        const parsedLocal = JSON.parse(rawLocal);
+        if (Array.isArray(parsedLocal)) {
+          saved = parsedLocal;
+        }
+      }
+    } catch {
+      // ignore localStorage parse errors
+    }
+  }
   if (!Array.isArray(saved)) return [];
   return saved.filter(
     (item) =>
@@ -285,6 +298,20 @@ export async function saveInstalledPocketAiModels(
   models: PocketAiLocalModelRecord[]
 ): Promise<void> {
   await idbSet(POCKET_AI_MODELS_IDB_KEY, models);
+  if (typeof window !== 'undefined') {
+    try {
+      if (models.length === 0) {
+        window.localStorage.removeItem(POCKET_AI_MODELS_IDB_KEY);
+      } else {
+        window.localStorage.setItem(
+          POCKET_AI_MODELS_IDB_KEY,
+          JSON.stringify(models)
+        );
+      }
+    } catch {
+      // ignore storage quota errors
+    }
+  }
 }
 
 export async function verifyAndImportLocalGgufFile(
@@ -524,6 +551,53 @@ export async function unloadNativePocketAiModel(): Promise<void> {
       : undefined;
   if (nativePlugin?.unloadModel) {
     await nativePlugin.unloadModel().catch(() => {});
+  }
+}
+
+export async function deleteNativePocketAiModel(model: {
+  id: string;
+  filename: string;
+}): Promise<void> {
+  const nativePlugin =
+    typeof window !== 'undefined'
+      ? window.Capacitor?.Plugins?.AtriumLocalAi
+      : undefined;
+  if (nativePlugin?.deleteModel) {
+    const res = await nativePlugin.deleteModel({
+      id: model.id,
+      filename: model.filename,
+    });
+    if (res && res.ok === false) {
+      throw new Error(
+        res.error || 'Failed to delete GGUF model from device storage.'
+      );
+    }
+  }
+  if (typeof window !== 'undefined') {
+    try {
+      const raw = window.localStorage.getItem(POCKET_AI_MODELS_IDB_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          const filtered = parsed.filter(
+            (item) =>
+              item &&
+              typeof item === 'object' &&
+              (item as { id?: unknown }).id !== model.id
+          );
+          if (filtered.length === 0) {
+            window.localStorage.removeItem(POCKET_AI_MODELS_IDB_KEY);
+          } else {
+            window.localStorage.setItem(
+              POCKET_AI_MODELS_IDB_KEY,
+              JSON.stringify(filtered)
+            );
+          }
+        }
+      }
+    } catch {
+      // ignore localStorage cleanup errors
+    }
   }
 }
 

@@ -116,7 +116,7 @@ interface SettingsModalProps {
   onImportPocketAiGguf?: (file: File) => Promise<void>;
   onLoadPocketAiModel?: (model: PocketAiLocalModelRecord) => Promise<void>;
   onUnloadPocketAiModel?: () => Promise<void>;
-  onRemovePocketAiModel?: (modelId: string) => void;
+  onRemovePocketAiModel?: (modelId: string) => Promise<void> | void;
   onSelectPocketLoopback?: (
     provider: ApiProvider,
     baseUrl: string,

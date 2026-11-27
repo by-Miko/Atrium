@@ -122,11 +122,13 @@ function LobbyCharacterCard({
       ref={registerSlotRef}
       onPointerDown={onPointerDown}
       onContextMenu={(e) => {
-        if (isAnyDragging || isSettling) {
-          e.preventDefault();
-        }
+        e.preventDefault();
       }}
-      style={{ WebkitTouchCallout: 'none' }}
+      style={{
+        touchAction: isDragging ? 'none' : 'pan-y',
+        WebkitTouchCallout: 'none',
+        WebkitUserSelect: 'none',
+      }}
       className={`relative aspect-[3/4] select-none sm:aspect-[2/3] ${
         isDragging || isSettling ? 'z-40' : ''
       }`}
@@ -192,7 +194,7 @@ function LobbyCharacterCard({
           }}
           className={`group mobile-card-blur relative h-full w-full overflow-hidden rounded-[20px] border bg-[var(--theme-glass)] backdrop-blur-md transition-shadow duration-200 ease-out sm:rounded-[26px] ${
             isDragging
-              ? 'cursor-grabbing border-amber-200/50 shadow-[0_24px_48px_rgba(0,0,0,0.65),0_0_0_1.5px_rgba(229,204,160,0.45)]'
+              ? 'cursor-grabbing border-amber-200/60 shadow-[0_24px_48px_rgba(0,0,0,0.65),0_0_0_2px_rgba(229,204,160,0.48)]'
               : isSettling
                 ? 'border-amber-200/35 shadow-[0_18px_40px_rgba(0,0,0,0.55)]'
                 : isRecent
@@ -288,8 +290,8 @@ function LobbyCharacterCard({
           <button
             type="button"
             onClick={onEnterScene}
-            className={`absolute inset-0 flex touch-manipulation flex-col justify-end p-3.5 text-left focus-visible:outline-2 focus-visible:outline-inset focus-visible:outline-[var(--theme-accent)] sm:p-5 ${
-              isDragging ? 'cursor-grabbing' : ''
+            className={`absolute inset-0 flex flex-col justify-end p-3.5 text-left focus-visible:outline-2 focus-visible:outline-inset focus-visible:outline-[var(--theme-accent)] sm:p-5 ${
+              isDragging ? 'cursor-grabbing touch-none' : 'touch-pan-y'
             }`}
           >
             {safeTags.length > 0 ? (
@@ -317,8 +319,10 @@ function LobbyCharacterCard({
 }
 
 const ALL_TAG_KEY = '__ALL__';
-const DRAG_HOLD_DELAY_MS = 150;
-const DRAG_MOVE_CANCEL_PX = 8;
+const DRAG_HOLD_DELAY_MOUSE_MS = 150;
+const DRAG_HOLD_DELAY_TOUCH_MS = 240;
+const DRAG_MOVE_CANCEL_MOUSE_PX = 8;
+const DRAG_MOVE_CANCEL_TOUCH_PX = 12;
 const SWAP_MIDPOINT_DEADZONE_PX = 28;
 const FLIP_NEIGHBOR_DURATION_MS = 700;
 const DRAG_SETTLE_DURATION_MS = 480;
@@ -462,6 +466,13 @@ export function AtriumLobby({
       setSettlingId(null);
 
       const pointerId = e.pointerId;
+      const isTouchOrPen = e.pointerType !== 'mouse';
+      const holdDelayMs = isTouchOrPen
+        ? DRAG_HOLD_DELAY_TOUCH_MS
+        : DRAG_HOLD_DELAY_MOUSE_MS;
+      const moveCancelPx = isTouchOrPen
+        ? DRAG_MOVE_CANCEL_TOUCH_PX
+        : DRAG_MOVE_CANCEL_MOUSE_PX;
       const startX = e.clientX;
       const startY = e.clientY;
 
@@ -514,8 +525,10 @@ export function AtriumLobby({
           const halfH = slotEl.offsetHeight / 2;
           const centerX = slotEl.offsetLeft + halfW;
           const centerY = slotEl.offsetTop + halfH;
-          const activeHalfW = Math.max(12, halfW - SWAP_MIDPOINT_DEADZONE_PX);
-          const activeHalfH = Math.max(12, halfH - SWAP_MIDPOINT_DEADZONE_PX);
+          const deadzoneX = Math.min(SWAP_MIDPOINT_DEADZONE_PX, halfW * 0.28);
+          const deadzoneY = Math.min(SWAP_MIDPOINT_DEADZONE_PX, halfH * 0.28);
+          const activeHalfW = Math.max(12, halfW - deadzoneX);
+          const activeHalfH = Math.max(12, halfH - deadzoneY);
           if (
             Math.abs(relX - centerX) <= activeHalfW &&
             Math.abs(relY - centerY) <= activeHalfH
@@ -651,6 +664,10 @@ export function AtriumLobby({
           }
           const latestOrder = previewOrderRef.current;
           const releasedId = state.cardId;
+          const slotEl = slotRefs.current.get(releasedId);
+          if (slotEl) {
+            slotEl.style.touchAction = 'pan-y';
+          }
           const visualEl = visualRefs.current.get(releasedId);
 
           if (visualEl) {
@@ -697,7 +714,7 @@ export function AtriumLobby({
             moveEvent.clientX - state.startX,
             moveEvent.clientY - state.startY
           );
-          if (dist > DRAG_MOVE_CANCEL_PX) {
+          if (dist > moveCancelPx) {
             finishPress(false);
           }
           return;
@@ -733,6 +750,12 @@ export function AtriumLobby({
         evaluateHoverSwap(moveEvent.clientX, moveEvent.clientY);
       };
 
+      const handleTouchMove = (touchEvent: TouchEvent) => {
+        if (pressRef.current === state && state.isDragging) {
+          touchEvent.preventDefault();
+        }
+      };
+
       const handlePointerUp = (upEvent: PointerEvent) => {
         if (upEvent.pointerId !== pointerId || pressRef.current !== state) {
           return;
@@ -750,12 +773,16 @@ export function AtriumLobby({
       window.addEventListener('pointermove', handlePointerMove, {
         passive: false,
       });
+      window.addEventListener('touchmove', handleTouchMove, {
+        passive: false,
+      });
       window.addEventListener('pointerup', handlePointerUp);
       window.addEventListener('pointercancel', handlePointerCancel);
 
       cleanupListenersRef.current = () => {
         stopAutoScroll();
         window.removeEventListener('pointermove', handlePointerMove);
+        window.removeEventListener('touchmove', handleTouchMove);
         window.removeEventListener('pointerup', handlePointerUp);
         window.removeEventListener('pointercancel', handlePointerCancel);
       };
@@ -772,6 +799,10 @@ export function AtriumLobby({
         setPreviewOrderIds(initialOrder);
         setDraggingId(state.cardId);
 
+        const slotEl = slotRefs.current.get(state.cardId);
+        if (slotEl) {
+          slotEl.style.touchAction = 'none';
+        }
         const visualEl = visualRefs.current.get(state.cardId);
         if (visualEl) {
           visualEl.style.transition =
@@ -785,12 +816,12 @@ export function AtriumLobby({
 
         if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
           try {
-            navigator.vibrate(12);
+            navigator.vibrate(14);
           } catch {
             // ignore unsupported vibration errors
           }
         }
-      }, DRAG_HOLD_DELAY_MS);
+      }, holdDelayMs);
     },
     [captureSlotRects, onReorderCharacters]
   );

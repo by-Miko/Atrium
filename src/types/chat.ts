@@ -308,6 +308,10 @@ export interface CapacitorAtriumLocalAiPlugin {
     contextLength?: number;
   }) => Promise<{ ok: boolean; estimatedRamMb?: number; error?: string }>;
   unloadModel?: () => Promise<{ ok: boolean }>;
+  deleteModel?: (options: {
+    id: string;
+    filename: string;
+  }) => Promise<{ ok: boolean; error?: string }>;
   generateChat?: (options: {
     modelId: string;
     messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>;

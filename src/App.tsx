@@ -52,6 +52,7 @@ import {
 } from './utils/backup';
 import {
   createInitialPocketAiRuntimeState,
+  deleteNativePocketAiModel,
   downloadAndVerifyPocketAiModel,
   inspectDeviceMemoryTier,
   loadInstalledPocketAiModels,
@@ -349,6 +350,8 @@ export default function App() {
   const backgroundUnloadTimerRef = useRef<number | null>(null);
   const backExitToastTimerRef = useRef<number | null>(null);
   const lastBackPressAtRef = useRef<number>(0);
+  const installedPocketModelsRef = useRef(installedPocketModels);
+  installedPocketModelsRef.current = installedPocketModels;
   const charactersRef = useRef(characters);
   charactersRef.current = characters;
   const conversationsRef = useRef(conversations);
@@ -1992,21 +1995,45 @@ export default function App() {
     }));
   }, []);
 
-  const handleRemovePocketAiModel = useCallback((modelId: string) => {
-    setInstalledPocketModels((prev) => {
-      const next = prev.filter((item) => item.id !== modelId);
-      void saveInstalledPocketAiModels(next);
-      return next;
-    });
-    if (pocketAiStateRef.current.activeModelId === modelId) {
-      void unloadNativePocketAiModel();
-      setPocketAiState((prev) => ({
-        ...prev,
-        isModelLoaded: false,
-        activeModelId: null,
-        activeModelName: null,
-        estimatedActiveRamMb: 0,
-      }));
+  const handleRemovePocketAiModel = useCallback(async (modelId: string) => {
+    setPocketLocalAiError(null);
+    const target = installedPocketModelsRef.current.find(
+      (item) => item.id === modelId
+    );
+    try {
+      if (
+        pocketAiStateRef.current.activeModelId === modelId ||
+        (pocketAiStateRef.current.isModelLoaded &&
+          pocketAiStateRef.current.activeModelId === modelId)
+      ) {
+        await unloadNativePocketAiModel();
+        setPocketAiState((prev) => ({
+          ...prev,
+          isModelLoaded: false,
+          activeModelId: null,
+          activeModelName: null,
+          estimatedActiveRamMb: 0,
+        }));
+      }
+
+      if (target) {
+        await deleteNativePocketAiModel({
+          id: target.id,
+          filename: target.filename,
+        });
+      }
+
+      setInstalledPocketModels((prev) => {
+        const next = prev.filter((item) => item.id !== modelId);
+        void saveInstalledPocketAiModels(next);
+        return next;
+      });
+    } catch (err) {
+      setPocketLocalAiError(
+        err instanceof Error
+          ? err.message
+          : 'Failed to delete model from device storage.'
+      );
     }
   }, []);
 

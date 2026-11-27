@@ -377,6 +377,7 @@ export interface UIStrings {
   pocketAiVerifiedBadge: string;
   pocketAiLoadModel: string;
   pocketAiLoadedActive: string;
+  pocketAiDeleteModelLabel: (name: string) => string;
   pocketAiUnloadRamButton: (mb: number) => string;
   pocketAiRamGuardHint: (sec: number) => string;
   pocketAiAutoUnloadedNotice: string;
@@ -885,6 +886,7 @@ export const TRANSLATIONS: Record<Language, UIStrings> = {
     pocketAiVerifiedBadge: 'GGUF Header Verified',
     pocketAiLoadModel: 'Load Model',
     pocketAiLoadedActive: 'Loaded in RAM',
+    pocketAiDeleteModelLabel: (name) => `Delete ${name} from storage`,
     pocketAiUnloadRamButton: (mb) => `Unload Model (Free ~${mb} MB RAM)`,
     pocketAiRamGuardHint: (sec) =>
       `Thermal & RAM Guard: auto-aborts and unloads ${sec}s after app goes to background.`,
@@ -1394,6 +1396,7 @@ export const TRANSLATIONS: Record<Language, UIStrings> = {
     pocketAiVerifiedBadge: 'Cabecera GGUF Verificada',
     pocketAiLoadModel: 'Cargar Modelo',
     pocketAiLoadedActive: 'Cargado en RAM',
+    pocketAiDeleteModelLabel: (name) => `Eliminar ${name} del almacenamiento`,
     pocketAiUnloadRamButton: (mb) =>
       `Descargar Modelo (Liberar ~${mb} MB RAM)`,
     pocketAiRamGuardHint: (sec) =>

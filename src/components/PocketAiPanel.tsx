@@ -45,7 +45,7 @@ interface PocketAiPanelProps {
   onImportLocalGguf: (file: File) => Promise<void>;
   onLoadModel: (model: PocketAiLocalModelRecord) => Promise<void>;
   onUnloadModel: () => Promise<void>;
-  onRemoveInstalledModel?: (modelId: string) => void;
+  onRemoveInstalledModel?: (modelId: string) => Promise<void> | void;
   onSelectLoopbackEndpoint: (
     provider: ApiProvider,
     baseUrl: string,
@@ -81,6 +81,7 @@ export function PocketAiPanel({
 }: PocketAiPanelProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [loadingModelId, setLoadingModelId] = useState<string | null>(null);
+  const [deletingModelId, setDeletingModelId] = useState<string | null>(null);
   const [isUnloading, setIsUnloading] = useState(false);
 
   const installedById = new Map(installedModels.map((m) => [m.id, m]));
@@ -110,6 +111,16 @@ export function PocketAiPanel({
       await onUnloadModel();
     } finally {
       setIsUnloading(false);
+    }
+  };
+
+  const handleDeleteClick = async (modelId: string) => {
+    if (!onRemoveInstalledModel) return;
+    setDeletingModelId(modelId);
+    try {
+      await onRemoveInstalledModel(modelId);
+    } finally {
+      setDeletingModelId(null);
     }
   };
 
@@ -352,7 +363,7 @@ export function PocketAiPanel({
                             ) : (
                               <button
                                 type="button"
-                                disabled={isThisLoading}
+                                disabled={isThisLoading || deletingModelId === spec.id}
                                 onClick={() => void handleLoadClick(installed)}
                                 className="inline-flex min-h-[44px] items-center gap-1.5 rounded-full px-4 text-xs font-semibold transition-colors disabled:opacity-55"
                                 style={{
@@ -368,6 +379,22 @@ export function PocketAiPanel({
                                 <span>{t.pocketAiLoadModel}</span>
                               </button>
                             )}
+                            {onRemoveInstalledModel ? (
+                              <button
+                                type="button"
+                                disabled={deletingModelId === spec.id || isThisLoading}
+                                onClick={() => void handleDeleteClick(spec.id)}
+                                aria-label={t.pocketAiDeleteModelLabel(spec.name)}
+                                title={t.pocketAiDeleteModelLabel(spec.name)}
+                                className="inline-flex h-11 w-11 shrink-0 touch-manipulation items-center justify-center rounded-full border border-white/15 bg-white/[0.06] text-white/75 shadow-[inset_1px_1px_0_rgba(255,255,255,0.14)] backdrop-blur-xl transition-colors hover:border-rose-400/45 hover:bg-rose-500/15 hover:text-rose-200 focus-visible:outline-2 focus-visible:outline-[var(--theme-accent)] disabled:opacity-50"
+                              >
+                                {deletingModelId === spec.id ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <Trash2 className="h-4 w-4" />
+                                )}
+                              </button>
+                            ) : null}
                           </div>
                         </>
                       ) : (
@@ -418,7 +445,7 @@ export function PocketAiPanel({
                     {!isLoaded ? (
                       <button
                         type="button"
-                        disabled={isLoading}
+                        disabled={isLoading || deletingModelId === model.id}
                         onClick={() => void handleLoadClick(model)}
                         className="inline-flex min-h-[44px] items-center gap-1.5 rounded-full px-4 text-xs font-semibold transition-colors disabled:opacity-55"
                         style={{
@@ -438,14 +465,20 @@ export function PocketAiPanel({
                         {t.pocketAiLoadedActive}
                       </span>
                     )}
-                    {onRemoveInstalledModel && !isLoaded ? (
+                    {onRemoveInstalledModel ? (
                       <button
                         type="button"
-                        onClick={() => onRemoveInstalledModel(model.id)}
-                        aria-label={t.deleteButton}
-                        className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/12 bg-white/5 text-white/70 hover:border-rose-400/40 hover:text-rose-200"
+                        disabled={deletingModelId === model.id || isLoading}
+                        onClick={() => void handleDeleteClick(model.id)}
+                        aria-label={t.pocketAiDeleteModelLabel(model.name)}
+                        title={t.pocketAiDeleteModelLabel(model.name)}
+                        className="inline-flex h-11 w-11 shrink-0 touch-manipulation items-center justify-center rounded-full border border-white/15 bg-white/[0.06] text-white/75 shadow-[inset_1px_1px_0_rgba(255,255,255,0.14)] backdrop-blur-xl transition-colors hover:border-rose-400/45 hover:bg-rose-500/15 hover:text-rose-200 focus-visible:outline-2 focus-visible:outline-[var(--theme-accent)] disabled:opacity-50"
                       >
-                        <Trash2 className="h-4 w-4" />
+                        {deletingModelId === model.id ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Trash2 className="h-4 w-4" />
+                        )}
                       </button>
                     ) : null}
                   </div>

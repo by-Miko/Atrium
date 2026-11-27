@@ -188,6 +188,25 @@ public class AtriumLocalAiPlugin extends Plugin {
         });
     }
     @PluginMethod
+    public void deleteModel(PluginCall call) {
+        String id = call.getString("id", "");
+        String rawFilename = call.getString("filename", "");
+        String safeFilename = rawFilename.replaceAll("[^a-zA-Z0-9._-]", "_");
+        if (id.equals(loadedModelId)) {
+            if (nativeLoaded) nativeAbort();
+            loadedModelId = null;
+        }
+        ioExecutor.execute(() -> {
+            if (nativeLoaded && loadedModelId == null) nativeFree();
+            File modelFile = new File(new File(getContext().getFilesDir(), "models"), safeFilename);
+            boolean deleted = !modelFile.exists() || modelFile.delete();
+            JSObject ok = new JSObject();
+            ok.put("ok", deleted);
+            call.resolve(ok);
+        });
+    }
+
+    @PluginMethod
     public void generateChat(PluginCall call) {
         if (!nativeLoaded || loadedModelId == null || loadedModelId.isEmpty()) {
             JSObject err = new JSObject();
