@@ -12,7 +12,7 @@ jobs:
         uses: actions/checkout@v4
       - name: Clone official llama.cpp for Android NDK
         run: |
-          git clone --depth 1 --branch b4856 https://github.com android/app/src/main/cpp/llama.cpp
+          git clone --depth 1 --branch b4856 https://github.com/ggml-org/llama.cpp.git android/app/src/main/cpp/llama.cpp
       - name: Setup Node.js 22
         uses: actions/setup-node@v4
         with:
