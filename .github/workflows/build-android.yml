@@ -25,12 +25,20 @@ jobs:
       - name: Setup Gradle cache
         uses: gradle/actions/setup-gradle@v4
       - name: Prepare Official Atrium Release Keystore
+        id: keystore
+        env:
+          KS_B64: ${{ secrets.ATRIUM_KEYSTORE_BASE64 }}
+          KS_PASS: ${{ secrets.ATRIUM_KEYSTORE_PASSWORD }}
+          KS_ALIAS: ${{ secrets.ATRIUM_KEY_ALIAS }}
+          KS_KPASS: ${{ secrets.ATRIUM_KEY_PASSWORD }}
         run: |
-          if [ -n "${{ secrets.ATRIUM_KEYSTORE_BASE64 }}" ]; then
-            echo "${{ secrets.ATRIUM_KEYSTORE_BASE64 }}" | base64 --decode > /tmp/atrium-release.jks
+          if [ -n "$KS_B64" ]; then
+            echo "$KS_B64" | base64 --decode > /tmp/atrium-release.jks
+            echo "generated=false" >> $GITHUB_OUTPUT
           else
             keytool -genkeypair -v -keystore /tmp/atrium-release.jks -keyalg RSA -keysize 2048 -validity 10000 -alias atrium-miko -storepass "AtriumMiko2026Release" -keypass "AtriumMiko2026Release" -dname "CN=Miko, OU=Atrium, O=Atrium Project, L=Playa del Carmen, ST=Quintana Roo, C=MX"
             base64 -w 0 /tmp/atrium-release.jks > /tmp/atrium-release.jks.base64.txt
+            echo "generated=true" >> $GITHUB_OUTPUT
           fi
       - name: Install dependencies & sync Capacitor
         run: |
@@ -54,7 +62,7 @@ jobs:
           name: Atrium-Android-1.6.0-Signed
           path: android/app/build/outputs/apk/release/Atrium-Android-1.6.0.apk
       - name: Backup Developer Keystore (First Run Only)
-        if: secrets.ATRIUM_KEYSTORE_BASE64 == ''
+        if: steps.keystore.outputs.generated == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: Atrium-Developer-Keystore-BACKUP
