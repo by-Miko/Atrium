@@ -19,13 +19,13 @@ import java.util.concurrent.Executors;
 import org.json.JSONObject;
 @CapacitorPlugin(name = "AtriumLocalAi")
 public class AtriumLocalAiPlugin extends Plugin {
-    private static boolean nativeLoaded = false;
+    private static boolean nativeLoaded = false; nativeLoadError = t.toString(); private static String nativeLoadError = "";
     static {
         try {
             System.loadLibrary("atrium_llama");
             nativeLoaded = true;
         } catch (Throwable t) {
-            nativeLoaded = false;
+            nativeLoaded = false; nativeLoadError = t.toString();
         }
     }
     private native void nativeInit();
@@ -156,7 +156,7 @@ public class AtriumLocalAiPlugin extends Plugin {
         if (!nativeLoaded) {
             JSObject err = new JSObject();
             err.put("ok", false);
-            err.put("error", "Native llama.cpp library unavailable.");
+            err.put("error", "Native llama.cpp unavailable: " + nativeLoadError + "");
             call.resolve(err);
             return;
         }

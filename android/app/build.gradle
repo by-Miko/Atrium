@@ -1,10 +1,12 @@
 apply plugin: 'com.android.application'
 
 android {
+    externalNativeBuild { cmake { path "src/main/cpp/CMakeLists.txt"; version "3.22.1" } }
     namespace = "io.github.bymiko.atrium"
     compileSdk = rootProject.ext.compileSdkVersion
     defaultConfig {
         applicationId "io.github.bymiko.atrium"
+        ndk { abiFilters 'arm64-v8a' }
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 2
