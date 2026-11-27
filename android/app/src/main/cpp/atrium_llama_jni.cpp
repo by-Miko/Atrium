@@ -81,7 +81,7 @@ Java_io_github_bymiko_atrium_AtriumLocalAiPlugin_nativeGenerate(
         return env->NewStringUTF("");
     }
     g_abort.store(false);
-    llama_memory_clear(llama_get_memory(g_ctx), true);
+    llama_kv_cache_clear(g_ctx);
 
     const char * promptCStr = env->GetStringUTFChars(jprompt, nullptr);
     std::string prompt(promptCStr);
