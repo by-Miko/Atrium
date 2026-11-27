@@ -273,9 +273,13 @@ export default function App() {
     if (isElectronHost || typeof window === 'undefined') return false;
     return new URLSearchParams(window.location.search).get('social-preview') === '1';
   });
-  const [showWebLanding, setShowWebLanding] = useState<boolean>(() =>
-    isWebEdition()
-  );
+  const [showWebLanding, setShowWebLanding] = useState<boolean>(() => {
+    if (!isWebEdition()) return false;
+    if (typeof window !== 'undefined') {
+      return !new URLSearchParams(window.location.search).has('app');
+    }
+    return true;
+  });
   const [mobileLinkStatus, setMobileLinkStatus] = useState<MobileLinkStatus>(
     EMPTY_MOBILE_LINK_STATUS
   );
@@ -692,6 +696,7 @@ export default function App() {
 
       if (
         !isElectronHost &&
+        !isWebEdition() &&
         typeof window !== 'undefined' &&
         (clientModeActive || window.location.protocol.startsWith('http'))
       ) {
@@ -1020,7 +1025,7 @@ export default function App() {
 
   // Debounced sync push on genuine local mutations (skips streaming & echoed remote snapshots)
   useEffect(() => {
-    if (!isStorageReady) return;
+    if (isWebEdition() || !isStorageReady) return;
     if (!hasHydratedForSyncRef.current) {
       hasHydratedForSyncRef.current = true;
       return;
@@ -1161,7 +1166,7 @@ export default function App() {
       settings?: OllamaSettings;
       userPersona?: UserPersona;
     }) => {
-      if (!isStorageReady) return;
+      if (isWebEdition() || !isStorageReady) return;
       const canSyncAsClient = isMobileLinkClient;
       const canSyncAsHost =
         isElectronHost &&
@@ -1244,7 +1249,9 @@ export default function App() {
 
   // Live background sync polling (Desktop Host & Mobile Link Client; paused while streaming)
   useEffect(() => {
-    if (!isStorageReady || streamingCharacterId !== null) return;
+    if (isWebEdition() || !isStorageReady || streamingCharacterId !== null) {
+      return;
+    }
 
     const canSyncAsClient = isMobileLinkClient;
     const canSyncAsHost =
@@ -1509,8 +1516,39 @@ export default function App() {
     if (streamingCharacterId) {
       stopStreaming();
     }
+    if (isWebEdition()) {
+      setIsSettingsOpen(false);
+      setIsMobileLinkModalOpen(false);
+      setIsCharacterModalOpen(false);
+      setProfileCharacter(null);
+      setLightboxImage(null);
+      setShowOllamaSetupHelper(false);
+      setIsStoryMemoryOpen(false);
+      setErrorMessage(null);
+    }
     setShowOutro(true);
   }, [stopStreaming, streamingCharacterId]);
+
+  const handleWebExitComplete = useCallback(() => {
+    setShowOutro(false);
+    setActiveWorld('lobby');
+
+    if (typeof window !== 'undefined') {
+      try {
+        const url = new URL(window.location.href);
+        url.searchParams.delete('app');
+        if (url.hash === '#launch-demo') {
+          url.hash = '';
+        }
+        const nextUrl = `${url.pathname}${url.search}${url.hash}` || '/';
+        window.history.replaceState(window.history.state, '', nextUrl);
+      } catch {
+        // Ignore History API restrictions
+      }
+    }
+
+    setShowWebLanding(true);
+  }, []);
 
   const handleClearChat = useCallback(() => {
     if (streamingCharacterId === activeCharacter.id) {
@@ -2506,18 +2544,21 @@ export default function App() {
   }
 
   if (showWebLanding) {
-    return <LandingShell onEnterApp={() => setShowWebLanding(false)} />;
+    return (
+      <LandingShell
+        lang={language}
+        onChangeLang={setLanguage}
+        onEnterApp={() => setShowWebLanding(false)}
+      />
+    );
   }
 
   const webEditionActive = isWebEdition();
-  const showWebOverviewBar = webEditionActive && activeWorld === 'lobby';
 
   const workspaceContent = (
     <div
       style={themeStyle}
-      className={`m-0 flex w-screen overflow-hidden bg-[var(--theme-bg)] p-0 text-[var(--theme-text)] transition-colors duration-300 ${
-        showWebOverviewBar ? 'min-h-0 flex-1' : 'h-[100dvh]'
-      }`}
+      className="m-0 flex h-[100dvh] w-screen overflow-hidden bg-[var(--theme-bg)] p-0 text-[var(--theme-text)] transition-colors duration-300"
     >
         <AnimatePresence mode="wait">
           {activeWorld === 'lobby' ? (
@@ -2615,7 +2656,8 @@ export default function App() {
                 onOpenOllamaSetup={() => setShowOllamaSetupHelper(true)}
                 mobileLinkActive={mobileLinkStatus.active}
                 onOpenMobileLink={
-                  isElectronHost && window.electronAPI?.startMobileLink
+                  (isElectronHost && window.electronAPI?.startMobileLink) ||
+                  webEditionActive
                     ? () => setIsMobileLinkModalOpen(true)
                     : undefined
                 }
@@ -2823,6 +2865,10 @@ export default function App() {
           isOpen={isMobileLinkModalOpen}
           language={language}
           status={mobileLinkStatus}
+          isWebDemoMode={
+            webEditionActive &&
+            !(isElectronHost && Boolean(window.electronAPI?.startMobileLink))
+          }
           onStatusChange={setMobileLinkStatus}
           onClose={() => setIsMobileLinkModalOpen(false)}
         />
@@ -2855,6 +2901,9 @@ export default function App() {
               craftedByLabel={t.outroCraftedBy}
               reopenLabel={t.reopenAtrium}
               onReopen={() => setShowOutro(false)}
+              onExitComplete={
+                webEditionActive ? handleWebExitComplete : undefined
+              }
             />
           ) : null}
         </AnimatePresence>
@@ -2863,25 +2912,7 @@ export default function App() {
 
   return (
     <MotionConfig reducedMotion="user">
-      {showWebOverviewBar ? (
-        <div className="flex h-[100dvh] w-screen flex-col overflow-hidden bg-[#050507]">
-          <div className="flex h-9 w-full shrink-0 items-center justify-between border-b border-white/10 bg-black/90 px-4 text-xs text-zinc-400">
-            <button
-              type="button"
-              onClick={() => setShowWebLanding(true)}
-              className="cursor-pointer whitespace-nowrap transition hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-400"
-            >
-              ← Atrium Overview
-            </button>
-            <span className="inline-flex items-center truncate rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-0.5 text-[11px] whitespace-nowrap text-zinc-300">
-              Interactive Web Demo • No Install Required
-            </span>
-          </div>
-          {workspaceContent}
-        </div>
-      ) : (
-        workspaceContent
-      )}
+      {workspaceContent}
     </MotionConfig>
   );
 }

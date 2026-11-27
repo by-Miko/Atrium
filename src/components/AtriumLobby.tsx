@@ -14,20 +14,29 @@ import {
 import { motion } from 'motion/react';
 import { useMemo, useRef, useState, type ChangeEvent } from 'react';
 import type { UIStrings } from '../i18n/translations';
-import type { ApiProvider, Character, UserPersona } from '../types/chat';
+import type {
+  ApiProvider,
+  Character,
+  Language,
+  UserPersona,
+} from '../types/chat';
 import { sanitizeImageUrl } from '../utils/imageUpload';
 import { parsePngCharacterCard } from '../utils/pngCharacterCard';
 import { sanitizeRenderedText } from '../utils/sanitize';
+import { isWebEdition } from '../utils/webEnvironment';
 import { CharacterIcon } from './CharacterIcon';
+import { MobileLinkModal } from './MobileLinkModal';
 import { PWAInstallButton } from './PWAInstallButton';
 
 interface AtriumLobbyProps {
   t: UIStrings;
+  language?: Language;
   characters: Character[];
   activeCharacterId: string;
   selectedModel: string;
   provider?: ApiProvider;
   ollamaStatus: 'checking' | 'connected' | 'offline';
+  isWebDemo?: boolean;
   introDone: boolean;
   userPersona: UserPersona;
   messageCounts: Record<string, number>;
@@ -230,11 +239,13 @@ const ALL_TAG_KEY = '__ALL__';
 
 export function AtriumLobby({
   t,
+  language,
   characters,
   activeCharacterId,
   selectedModel,
   provider = 'ollama',
   ollamaStatus,
+  isWebDemo = false,
   introDone,
   userPersona,
   messageCounts,
@@ -253,7 +264,13 @@ export function AtriumLobby({
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTag, setActiveTag] = useState<string>(ALL_TAG_KEY);
   const [pngImportError, setPngImportError] = useState<string | null>(null);
+  const [isWebMobileModalOpen, setIsWebMobileModalOpen] = useState(false);
   const pngInputRef = useRef<HTMLInputElement | null>(null);
+  const webEdition = isWebEdition();
+  const isSpanish = language === 'es' || t.mobileLinkButton === 'Móvil';
+  const webDemoNoticeFull = isSpanish
+    ? 'Demo Web Interactiva — Las funciones y el diseño pueden variar respecto a la versión final más reciente'
+    : 'Interactive Web Demo — Features and visuals may vary from the latest desktop release';
 
   const handlePngFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -437,9 +454,57 @@ export function AtriumLobby({
             </span>
           </div>
 
-          {/* Right: Liquid Glass Pills (Engine Status, User Persona, Settings, Exit) */}
+          {/* Center: Compact Optical Liquid Glass Marquee Demo Notice (Tablet & Desktop) */}
+          {webEdition ? (
+            <div className="hidden min-w-0 flex-1 items-center justify-center px-2 sm:flex">
+              <div
+                title={webDemoNoticeFull}
+                className="group relative inline-flex w-full max-w-[230px] items-center overflow-hidden rounded-full border border-white/14 bg-white/[0.045] px-2.5 py-1 text-[11px] font-medium text-white/85 shadow-[inset_0_1px_0_rgba(255,255,255,0.14),0_4px_16px_rgba(0,0,0,0.22)] backdrop-blur-xl md:max-w-[300px] lg:max-w-[360px]"
+              >
+                <div
+                  className="w-full overflow-hidden"
+                  style={{
+                    maskImage:
+                      'linear-gradient(to right, transparent 0%, black 10%, black 90%, transparent 100%)',
+                    WebkitMaskImage:
+                      'linear-gradient(to right, transparent 0%, black 10%, black 90%, transparent 100%)',
+                  }}
+                >
+                  <div className="animate-demo-marquee flex w-max whitespace-nowrap will-change-transform">
+                    <span className="inline-block shrink-0 pr-10">
+                      {webDemoNoticeFull}
+                    </span>
+                    <span
+                      aria-hidden="true"
+                      className="inline-block shrink-0 pr-10"
+                    >
+                      {webDemoNoticeFull}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {/* Right: Liquid Glass Pills (Engine Status, Mobile, User Persona, Settings, Exit) */}
           <div className="flex items-center gap-1.5 shrink-0 sm:gap-2">
-            {provider === 'openai' ? (
+            {isWebDemo ? (
+              <button
+                type="button"
+                onClick={onOpenSettings}
+                aria-label={t.webDemoStatusReady}
+                title={t.webDemoStatusReady}
+                className="inline-flex h-10 w-10 touch-manipulation items-center justify-center gap-2 rounded-full border border-cyan-400/25 bg-emerald-500/[0.08] px-0 text-xs font-medium text-cyan-100 shadow-[inset_1px_1px_0_rgba(255,255,255,0.16)] backdrop-blur-xl transition-all duration-700 ease-in-out hover:border-cyan-300/50 hover:bg-cyan-500/[0.14] focus-visible:outline-2 focus-visible:outline-[var(--theme-accent)] whitespace-nowrap shrink-0 sm:h-9 sm:w-auto sm:px-3"
+              >
+                <span
+                  aria-hidden="true"
+                  className="h-2 w-2 rounded-full bg-gradient-to-tr from-emerald-400 to-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.8)]"
+                />
+                <span className="hidden md:inline">
+                  {t.webDemoStatusReady}
+                </span>
+              </button>
+            ) : provider === 'openai' ? (
               <button
                 type="button"
                 onClick={onOpenSettings}
@@ -538,6 +603,23 @@ export function AtriumLobby({
                   />
                 ) : null}
               </button>
+            ) : webEdition ? (
+              <button
+                type="button"
+                onClick={() => {
+                  if (onOpenMobileLink) {
+                    onOpenMobileLink();
+                  } else {
+                    setIsWebMobileModalOpen(true);
+                  }
+                }}
+                aria-label={t.mobileLinkTitle}
+                title={t.mobileLinkTitle}
+                className="inline-flex h-10 w-10 touch-manipulation items-center justify-center gap-1.5 rounded-full border border-[rgba(255,255,255,0.12)] bg-[var(--theme-glass)] px-0 text-xs font-medium text-white/90 shadow-[inset_1px_1px_0_rgba(255,255,255,0.16)] backdrop-blur-xl transition-colors duration-700 ease-in-out hover:bg-[var(--theme-glass-hover)] hover:text-white focus-visible:outline-2 focus-visible:outline-[var(--theme-accent)] whitespace-nowrap shrink-0 sm:h-9 sm:w-auto sm:px-3"
+              >
+                <Smartphone className="h-4 w-4 text-[var(--theme-accent)] sm:h-3.5 sm:w-3.5" />
+                <span className="hidden sm:inline">{t.mobileLinkButton}</span>
+              </button>
             ) : null}
 
             <PWAInstallButton t={t} compact />
@@ -582,6 +664,38 @@ export function AtriumLobby({
             </button>
           </div>
         </div>
+
+        {/* Mobile Compact Optical Liquid Glass Marquee Demo Notice */}
+        {webEdition ? (
+          <div className="flex justify-center border-t border-white/[0.07] px-4 py-1.5 sm:hidden">
+            <div
+              title={webDemoNoticeFull}
+              className="group relative inline-flex w-full max-w-[300px] items-center overflow-hidden rounded-full border border-white/12 bg-white/[0.045] px-2.5 py-0.5 text-[10px] font-medium text-white/85 shadow-[inset_0_1px_0_rgba(255,255,255,0.12)] backdrop-blur-xl"
+            >
+              <div
+                className="w-full overflow-hidden"
+                style={{
+                  maskImage:
+                    'linear-gradient(to right, transparent 0%, black 10%, black 90%, transparent 100%)',
+                  WebkitMaskImage:
+                    'linear-gradient(to right, transparent 0%, black 10%, black 90%, transparent 100%)',
+                }}
+              >
+                <div className="animate-demo-marquee flex w-max whitespace-nowrap will-change-transform">
+                  <span className="inline-block shrink-0 pr-10">
+                    {webDemoNoticeFull}
+                  </span>
+                  <span
+                    aria-hidden="true"
+                    className="inline-block shrink-0 pr-10"
+                  >
+                    {webDemoNoticeFull}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : null}
       </header>
 
       {/* Scrollable Lobby Content */}
@@ -727,6 +841,25 @@ export function AtriumLobby({
           )}
         </div>
       </div>
+
+      {webEdition && !onOpenMobileLink ? (
+        <MobileLinkModal
+          t={t}
+          isOpen={isWebMobileModalOpen}
+          language={isSpanish ? 'es' : 'en'}
+          status={{
+            active: false,
+            port: null,
+            token: null,
+            urls: { lan: [], tailscale: [] },
+            connectedClients: 0,
+            lastSyncAt: null,
+          }}
+          isWebDemoMode
+          onStatusChange={() => {}}
+          onClose={() => setIsWebMobileModalOpen(false)}
+        />
+      ) : null}
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { motion } from 'motion/react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 declare global {
   interface Window {
@@ -15,6 +15,7 @@ interface OutroSplashProps {
   craftedByLabel?: string;
   reopenLabel: string;
   onReopen: () => void;
+  onExitComplete?: () => void;
 }
 
 // Exact geometric Atrium 'A' paths reversed to trace right-to-left
@@ -31,13 +32,26 @@ export function OutroSplash({
   craftedByLabel = 'Crafted by Miko',
   reopenLabel,
   onReopen,
+  onExitComplete,
 }: OutroSplashProps) {
   const [phase, setPhase] = useState<'shutting-down' | 'standby'>(
     'shutting-down'
   );
+  const onExitCompleteRef = useRef(onExitComplete);
+  onExitCompleteRef.current = onExitComplete;
 
   useEffect(() => {
+    const prefersReduced =
+      typeof window !== 'undefined' &&
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const durationMs = prefersReduced ? 350 : 2200;
+
     const closeTimer = window.setTimeout(() => {
+      if (onExitCompleteRef.current) {
+        onExitCompleteRef.current();
+        return;
+      }
       try {
         if (window.atriumDesktop?.closeWindow) {
           window.atriumDesktop.closeWindow();
@@ -47,7 +61,7 @@ export function OutroSplash({
         // Browsers often block window.close() on non-script-opened tabs
       }
       setPhase('standby');
-    }, 2200);
+    }, durationMs);
 
     return () => {
       window.clearTimeout(closeTimer);

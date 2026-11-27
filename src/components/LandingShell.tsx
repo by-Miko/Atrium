@@ -21,12 +21,14 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { getBaseAssetUrl } from '../utils/webEnvironment';
+import { getBaseAssetUrl, isWebEdition } from '../utils/webEnvironment';
 
 export type LandingLang = 'en' | 'es';
 
 export interface LandingShellProps {
   onEnterApp: () => void;
+  lang?: LandingLang;
+  onChangeLang?: (lang: LandingLang) => void;
 }
 
 interface ArchitectureFactCard {
@@ -1798,9 +1800,23 @@ function SecretChronicleOverlay({
   );
 }
 
-export function LandingShell({ onEnterApp }: LandingShellProps) {
-  const [lang, setLang] = useState<LandingLang>('en');
-  const [videoError, setVideoError] = useState<boolean>(false);
+export function LandingShell({
+  onEnterApp,
+  lang: controlledLang,
+  onChangeLang,
+}: LandingShellProps) {
+  const [internalLang, setInternalLang] = useState<LandingLang>(
+    () => controlledLang ?? 'en'
+  );
+  const lang = controlledLang ?? internalLang;
+  const setLang = useCallback(
+    (nextLang: LandingLang) => {
+      setInternalLang(nextLang);
+      onChangeLang?.(nextLang);
+    },
+    [onChangeLang]
+  );
+  const [videoError, setVideoError] = useState<boolean>(() => isWebEdition());
   const [pendingDownloadTarget, setPendingDownloadTarget] =
     useState<PendingDownloadTarget | null>(null);
   const [secretChronicleOpen, setSecretChronicleOpen] =

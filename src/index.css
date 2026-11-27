@@ -165,6 +165,24 @@
   }
 }
 
+@keyframes demoNoticeMarquee {
+  0% {
+    transform: translate3d(0%, 0, 0);
+  }
+  100% {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
+.animate-demo-marquee {
+  animation: demoNoticeMarquee 20s linear infinite;
+}
+
+.group:hover .animate-demo-marquee,
+.animate-demo-marquee:hover {
+  animation-play-state: paused;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
