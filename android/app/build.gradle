@@ -18,8 +18,20 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+        signingConfigs {
+        release {
+            signingConfig signingConfigs.release
+            if (System.getenv("ATRIUM_KEYSTORE_PATH") != null) {
+                storeFile file(System.getenv("ATRIUM_KEYSTORE_PATH"))
+                storePassword System.getenv("ATRIUM_KEYSTORE_PASSWORD")
+                keyAlias System.getenv("ATRIUM_KEY_ALIAS")
+                keyPassword System.getenv("ATRIUM_KEY_PASSWORD")
+            }
+        }
+    }
     buildTypes {
         release {
+            signingConfig signingConfigs.release
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }

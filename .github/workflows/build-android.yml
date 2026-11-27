@@ -24,18 +24,40 @@ jobs:
           java-version: '21'
       - name: Setup Gradle cache
         uses: gradle/actions/setup-gradle@v4
+      - name: Prepare Official Atrium Release Keystore
+        run: |
+          if [ -n "${{ secrets.ATRIUM_KEYSTORE_BASE64 }}" ]; then
+            echo "${{ secrets.ATRIUM_KEYSTORE_BASE64 }}" | base64 --decode > /tmp/atrium-release.jks
+          else
+            keytool -genkeypair -v -keystore /tmp/atrium-release.jks -keyalg RSA -keysize 2048 -validity 10000 -alias atrium-miko -storepass "AtriumMiko2026Release" -keypass "AtriumMiko2026Release" -dname "CN=Miko, OU=Atrium, O=Atrium Project, L=Playa del Carmen, ST=Quintana Roo, C=MX"
+            base64 -w 0 /tmp/atrium-release.jks > /tmp/atrium-release.jks.base64.txt
+          fi
       - name: Install dependencies & sync Capacitor
         run: |
           npm ci --legacy-peer-deps
           npm run build
           npx cap sync android
-      - name: Build Android APK
+      - name: Build Signed Release Android APK
         working-directory: android
+        env:
+          ATRIUM_KEYSTORE_PATH: /tmp/atrium-release.jks
+          ATRIUM_KEYSTORE_PASSWORD: ${{ secrets.ATRIUM_KEYSTORE_PASSWORD || 'AtriumMiko2026Release' }}
+          ATRIUM_KEY_ALIAS: ${{ secrets.ATRIUM_KEY_ALIAS || 'atrium-miko' }}
+          ATRIUM_KEY_PASSWORD: ${{ secrets.ATRIUM_KEY_PASSWORD || 'AtriumMiko2026Release' }}
         run: |
           chmod +x gradlew
-          ./gradlew assembleDebug
-      - name: Upload Atrium APK artifact
+          ./gradlew assembleRelease
+          cp app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/Atrium-Android-1.6.0.apk
+      - name: Upload Signed Atrium Release APK
         uses: actions/upload-artifact@v4
         with:
-          name: Atrium-Android-APK
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          name: Atrium-Android-1.6.0-Signed
+          path: android/app/build/outputs/apk/release/Atrium-Android-1.6.0.apk
+      - name: Backup Developer Keystore (First Run Only)
+        if: secrets.ATRIUM_KEYSTORE_BASE64 == ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: Atrium-Developer-Keystore-BACKUP
+          path: |
+            /tmp/atrium-release.jks
+            /tmp/atrium-release.jks.base64.txt
