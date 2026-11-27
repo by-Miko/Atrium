@@ -20,7 +20,6 @@ android {
     }
         signingConfigs {
         release {
-            signingConfig signingConfigs.release
             if (System.getenv("ATRIUM_KEYSTORE_PATH") != null) {
                 storeFile file(System.getenv("ATRIUM_KEYSTORE_PATH"))
                 storePassword System.getenv("ATRIUM_KEYSTORE_PASSWORD")
