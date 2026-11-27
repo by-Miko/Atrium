@@ -508,6 +508,7 @@ export function GrandIntroSplash({
         opacity: 0,
         transition: { duration: 0.45, ease: [0.22, 1, 0.36, 1] },
       }}
+      style={{ willChange: 'transform, opacity' }}
       className="fixed inset-0 z-[9999] flex cursor-pointer items-center justify-center overflow-hidden select-none"
     >
       {/* Layer 1: Pure GPU Composite Curtain (100% opaque 0.0s - 6.8s, lifts 1 -> 0 over 6.8s - 7.6s with exponential ease-out) */}

@@ -61,6 +61,8 @@ export function IntroSplash({
       className="fixed inset-0 z-[100] flex items-center justify-center overflow-hidden select-none"
       style={{
         willChange: 'transform, opacity',
+        backfaceVisibility: 'hidden',
+        WebkitBackfaceVisibility: 'hidden',
         backgroundColor: '#010205',
         backgroundImage:
           'radial-gradient(circle at 50% 48%, #070C18 0%, #03050B 45%, #010205 100%)',
@@ -84,6 +86,7 @@ export function IntroSplash({
             initial={{ scale: 0.96 }}
             animate={{ scale: 1 }}
             transition={{ duration: 0.92, ease: [0.22, 1, 0.36, 1] }}
+            style={{ willChange: 'transform, opacity' }}
             className="relative shrink-0"
           >
             <svg
@@ -239,6 +242,7 @@ export function IntroSplash({
               }}
               className="mx-0.5 h-full w-[1.5px] origin-center rounded-full"
               style={{
+                willChange: 'transform, opacity',
                 background:
                   'linear-gradient(180deg, transparent 0%, rgba(253,230,138,0.85) 22%, #FFFFFF 50%, rgba(253,230,138,0.85) 78%, transparent 100%)',
                 boxShadow:
@@ -261,6 +265,7 @@ export function IntroSplash({
               }}
               className="pointer-events-none absolute h-24 w-36 rounded-full blur-2xl"
               style={{
+                willChange: 'transform, opacity',
                 background:
                   'radial-gradient(circle, rgba(253,230,138,0.55) 0%, rgba(245,158,11,0.22) 48%, transparent 75%)',
               }}
@@ -299,6 +304,7 @@ export function IntroSplash({
                   }}
                   className="inline-block bg-clip-text font-display text-[44px] font-bold tracking-[-0.03em] text-transparent sm:text-[56px]"
                   style={{
+                    willChange: 'transform, opacity',
                     backgroundImage:
                       'linear-gradient(100deg, #FFFFFF 0%, #F1EEF9 34%, #FDE68A 62%, #F59E0B 80%, #FFFFFF 100%)',
                     backgroundSize: '240% 100%',

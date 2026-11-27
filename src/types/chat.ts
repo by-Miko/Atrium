@@ -325,10 +325,16 @@ export interface CapacitorBridge {
   getPlatform?: () => string;
   Plugins?: {
     App?: {
-      addListener?: (
-        eventName: 'appStateChange',
-        cb: (state: { isActive: boolean }) => void
-      ) => Promise<CapacitorPluginListenerHandle> | CapacitorPluginListenerHandle;
+      addListener?: {
+        (
+          eventName: 'appStateChange',
+          cb: (state: { isActive: boolean }) => void
+        ): Promise<CapacitorPluginListenerHandle> | CapacitorPluginListenerHandle;
+        (
+          eventName: 'backButton',
+          cb: (data: { canGoBack?: boolean }) => void
+        ): Promise<CapacitorPluginListenerHandle> | CapacitorPluginListenerHandle;
+      };
       exitApp?: () => Promise<void> | void;
     };
     BarcodeScanner?: {

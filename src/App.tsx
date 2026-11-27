@@ -91,7 +91,7 @@ import {
   streamProviderChat,
   summarizeConversationMemory,
 } from './utils/ollama';
-import { isMobileOrAndroidRuntime } from './utils/platform';
+import { isMobileOrAndroidRuntime, isNativeAndroid } from './utils/platform';
 import {
   DEFAULT_OLLAMA_SETTINGS,
   DEFAULT_USER_PERSONA,
@@ -340,12 +340,15 @@ export default function App() {
   const [pocketLocalAiError, setPocketLocalAiError] = useState<string | null>(
     null
   );
+  const [showBackExitToast, setShowBackExitToast] = useState(false);
 
   const t = TRANSLATIONS[language];
 
   const abortControllerRef = useRef<AbortController | null>(null);
   const pocketDownloadAbortRef = useRef<AbortController | null>(null);
   const backgroundUnloadTimerRef = useRef<number | null>(null);
+  const backExitToastTimerRef = useRef<number | null>(null);
+  const lastBackPressAtRef = useRef<number>(0);
   const charactersRef = useRef(characters);
   charactersRef.current = characters;
   const conversationsRef = useRef(conversations);
@@ -822,20 +825,35 @@ export default function App() {
       }
 
       if (isMobileClientRuntime) {
-        void Promise.all([
-          inspectDeviceMemoryTier(),
-          loadInstalledPocketAiModels(),
-        ]).then(([memInfo, savedPocketModels]) => {
+        const runDeferredMemoryInspection = () => {
           if (cancelled) return;
-          setPocketAiState((prev) => ({
-            ...prev,
-            deviceMemoryGb: memInfo.deviceMemoryGb,
-            memoryMeasured: memInfo.measured,
-            recommendedTier: memInfo.recommendedTier,
-            autoUnloadDelaySec: memInfo.autoUnloadDelaySec,
-          }));
-          setInstalledPocketModels(savedPocketModels);
-        });
+          void Promise.all([
+            inspectDeviceMemoryTier(),
+            loadInstalledPocketAiModels(),
+          ]).then(([memInfo, savedPocketModels]) => {
+            if (cancelled) return;
+            setPocketAiState((prev) => ({
+              ...prev,
+              deviceMemoryGb: memInfo.deviceMemoryGb,
+              memoryMeasured: memInfo.measured,
+              recommendedTier: memInfo.recommendedTier,
+              autoUnloadDelaySec: memInfo.autoUnloadDelaySec,
+            }));
+            setInstalledPocketModels(savedPocketModels);
+          });
+        };
+
+        if (
+          typeof window !== 'undefined' &&
+          typeof window.requestAnimationFrame === 'function'
+        ) {
+          window.requestAnimationFrame(() => {
+            if (cancelled) return;
+            window.setTimeout(runDeferredMemoryInspection, 150);
+          });
+        } else {
+          window.setTimeout(runDeferredMemoryInspection, 150);
+        }
       }
 
       const effectiveClientSettings =
@@ -1667,6 +1685,130 @@ export default function App() {
       }
     };
   }, [applyRemoteSyncSnapshot, isElectronHost, stopStreaming]);
+
+  const backNavStateRef = useRef({
+    showOutro,
+    introMode,
+    lightboxImage,
+    isCharacterModalOpen,
+    profileCharacter,
+    isStoryMemoryOpen,
+    isMobileLinkModalOpen,
+    isSettingsOpen,
+    showOllamaSetupHelper,
+    activeWorld,
+  });
+  backNavStateRef.current = {
+    showOutro,
+    introMode,
+    lightboxImage,
+    isCharacterModalOpen,
+    profileCharacter,
+    isStoryMemoryOpen,
+    isMobileLinkModalOpen,
+    isSettingsOpen,
+    showOllamaSetupHelper,
+    activeWorld,
+  };
+
+  // Native Android hardware back button & edge-swipe gesture navigation
+  useEffect(() => {
+    if (!isNativeAndroid()) return;
+    const appPlugin = window.Capacitor?.Plugins?.App;
+    if (!appPlugin?.addListener) return;
+
+    let backHandle: { remove: () => Promise<void> | void } | undefined;
+    const maybePromise = appPlugin.addListener('backButton', () => {
+      const s = backNavStateRef.current;
+      if (s.showOutro) {
+        return;
+      }
+      if (s.introMode !== null) {
+        handleIntroComplete();
+        return;
+      }
+      if (s.lightboxImage) {
+        setLightboxImage(null);
+        return;
+      }
+      if (s.isCharacterModalOpen) {
+        setIsCharacterModalOpen(false);
+        return;
+      }
+      if (s.profileCharacter) {
+        setProfileCharacter(null);
+        return;
+      }
+      if (s.isStoryMemoryOpen) {
+        setIsStoryMemoryOpen(false);
+        return;
+      }
+      if (s.isMobileLinkModalOpen) {
+        setIsMobileLinkModalOpen(false);
+        return;
+      }
+      if (s.isSettingsOpen) {
+        setIsSettingsOpen(false);
+        return;
+      }
+      if (s.showOllamaSetupHelper) {
+        setShowOllamaSetupHelper(false);
+        return;
+      }
+      if (s.activeWorld === 'chat') {
+        if (streamingCharIdRef.current !== null) {
+          stopStreaming();
+        }
+        setErrorMessage(null);
+        setActiveWorld('lobby');
+        return;
+      }
+
+      const now = Date.now();
+      if (now - lastBackPressAtRef.current < 2000) {
+        if (backExitToastTimerRef.current !== null) {
+          window.clearTimeout(backExitToastTimerRef.current);
+          backExitToastTimerRef.current = null;
+        }
+        lastBackPressAtRef.current = 0;
+        setShowBackExitToast(false);
+        void window.Capacitor?.Plugins?.App?.exitApp?.();
+        return;
+      }
+
+      lastBackPressAtRef.current = now;
+      setShowBackExitToast(true);
+      if (backExitToastTimerRef.current !== null) {
+        window.clearTimeout(backExitToastTimerRef.current);
+      }
+      backExitToastTimerRef.current = window.setTimeout(() => {
+        backExitToastTimerRef.current = null;
+        lastBackPressAtRef.current = 0;
+        setShowBackExitToast(false);
+      }, 2000);
+    });
+
+    if (
+      maybePromise &&
+      typeof (maybePromise as Promise<unknown>).then === 'function'
+    ) {
+      void (maybePromise as Promise<{ remove: () => Promise<void> | void }>).then(
+        (handle) => {
+          backHandle = handle;
+        }
+      );
+    } else {
+      backHandle = maybePromise as { remove: () => Promise<void> | void };
+    }
+
+    return () => {
+      void backHandle?.remove?.();
+      if (backExitToastTimerRef.current !== null) {
+        window.clearTimeout(backExitToastTimerRef.current);
+        backExitToastTimerRef.current = null;
+      }
+    };
+  }, [handleIntroComplete, stopStreaming]);
 
   const handlePairClientSuccess = useCallback(
     async (resolution: SmartRouteResolution) => {
@@ -3647,6 +3789,23 @@ export default function App() {
           onDisconnectClient={handleDisconnectClient}
           onClose={() => setIsMobileLinkModalOpen(false)}
         />
+
+        <AnimatePresence>
+          {showBackExitToast ? (
+            <motion.div
+              key="android-back-exit-toast"
+              role="status"
+              aria-live="polite"
+              initial={{ opacity: 0, y: 12, scale: 0.96 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 8, scale: 0.96 }}
+              transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+              className="pointer-events-none fixed bottom-[max(1.5rem,env(safe-area-inset-bottom))] left-1/2 z-[90] -translate-x-1/2 whitespace-nowrap rounded-full border border-white/15 bg-[#050507]/85 px-4 py-2 text-xs font-medium text-white/95 shadow-[inset_1px_1px_0_rgba(255,255,255,0.16),0_12px_32px_rgba(0,0,0,0.6)] backdrop-blur-xl"
+            >
+              {t.androidBackExitPrompt}
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
 
         <OfflineIndicator t={t} />
 

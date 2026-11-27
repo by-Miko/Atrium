@@ -385,6 +385,7 @@ export interface UIStrings {
   pocketAiLoopbackOllamaBtn: string;
   pocketAiLoopbackLlamaBtn: string;
   pocketAiLoopbackHint: string;
+  androidBackExitPrompt: string;
   themes: Record<ThemeId, { name: string; subtitle: string }>;
   bubbleSchemes: Record<BubbleSchemeId, { name: string; subtitle: string }>;
 }
@@ -896,6 +897,7 @@ export const TRANSLATIONS: Record<Language, UIStrings> = {
     pocketAiLoopbackLlamaBtn: 'Connect llama.cpp (127.0.0.1:8080)',
     pocketAiLoopbackHint:
       'Connect immediately to an Ollama (Termux) or llama.cpp OpenAI-compatible server running locally on this phone.',
+    androidBackExitPrompt: 'Swipe or press Back again to exit',
   },
   es: {
     appTitle: 'Atrium',
@@ -1405,5 +1407,6 @@ export const TRANSLATIONS: Record<Language, UIStrings> = {
     pocketAiLoopbackLlamaBtn: 'Conectar llama.cpp (127.0.0.1:8080)',
     pocketAiLoopbackHint:
       'Conecta al instante con un servidor Ollama (Termux) o llama.cpp ejecutándose localmente en este teléfono.',
+    androidBackExitPrompt: 'Desliza o presiona Atrás de nuevo para salir',
   },
 };
