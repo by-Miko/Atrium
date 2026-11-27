@@ -11,8 +11,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
       - name: Clone official llama.cpp for Android NDK
-        run: |
-          git clone --depth 1 --branch b4856 https://github.com/ggml-org/llama.cpp.git android/app/src/main/cpp/llama.cpp
+        run: git clone --depth 1 --branch b4856 https://github.com/ggml-org/llama.cpp.git android/app/src/main/cpp/llama.cpp
       - name: Setup Node.js 22
         uses: actions/setup-node@v4
         with:
@@ -23,9 +22,8 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '21'
-            - name: Setup Gradle cache
+      - name: Setup Gradle cache
         uses: gradle/actions/setup-gradle@v4
-
       - name: Install dependencies & sync Capacitor
         run: |
           npm ci --legacy-peer-deps
