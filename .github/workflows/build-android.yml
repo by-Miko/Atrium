@@ -1,42 +1,38 @@
 name: Build Android APK (Hardened Edition)
-
 on:
   workflow_dispatch:
   push:
     tags:
       - 'v1.6.*'
-
 jobs:
   build-apk:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
-      - name: Setup Node.js 20
+      - name: Clone official llama.cpp for Android NDK
+        run: |
+          git clone --depth 1 --branch b4856 https://github.com android/app/src/main/cpp/llama.cpp
+      - name: Setup Node.js 22
         uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: 'npm'
-
-      - name: Setup JDK 17
+      - name: Setup JDK 21
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '21'
-
       - name: Install dependencies & sync Capacitor
         run: |
           npm ci --legacy-peer-deps
           npm run build
           npx cap sync android
-
       - name: Build Android APK
         working-directory: android
         run: |
           chmod +x gradlew
           ./gradlew assembleDebug
-
       - name: Upload Atrium APK artifact
         uses: actions/upload-artifact@v4
         with:
