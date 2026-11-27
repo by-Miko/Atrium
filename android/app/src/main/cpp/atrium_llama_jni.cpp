@@ -54,9 +54,9 @@ Java_io_github_bymiko_atrium_AtriumLocalAiPlugin_nativeLoadModel(JNIEnv * env, j
 
     llama_context_params cparams = llama_context_default_params();
     cparams.n_ctx = nCtx > 0 ? nCtx : 2048;
-    cparams.n_batch = 256;
-    cparams.n_threads = 4;
-    cparams.n_threads_batch = 4;
+    cparams.n_batch = 512;
+    cparams.n_threads = 6;
+    cparams.n_threads_batch = 6;
 
     g_ctx = llama_init_from_model(g_model, cparams);
     if (g_ctx == nullptr) {
