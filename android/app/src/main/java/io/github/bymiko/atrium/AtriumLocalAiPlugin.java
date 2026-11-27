@@ -19,7 +19,7 @@ import java.util.concurrent.Executors;
 import org.json.JSONObject;
 @CapacitorPlugin(name = "AtriumLocalAi")
 public class AtriumLocalAiPlugin extends Plugin {
-    private static boolean nativeLoaded = false; nativeLoadError = t.toString(); private static String nativeLoadError = "";
+    private static boolean nativeLoaded = false; private static String nativeLoadError = "";
     static {
         try {
             System.loadLibrary("atrium_llama");
