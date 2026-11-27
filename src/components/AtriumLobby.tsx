@@ -1023,16 +1023,22 @@ export function AtriumLobby({
       )}
 
       {/* Top Spatial Header */}
-      <header className="pt-safe relative z-20 shrink-0 border-b border-[rgba(255,255,255,0.12)] bg-[var(--theme-glass)] backdrop-blur-2xl transition-colors duration-700 ease-in-out">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-2 px-4 py-3 sm:gap-4 sm:px-8 sm:py-3.5">
+      <header
+        className={`${
+          isNativeAndroid()
+            ? 'pt-[max(env(safe-area-inset-top),18px)]'
+            : 'pt-safe'
+        } relative z-20 shrink-0 border-b border-[rgba(255,255,255,0.12)] bg-[var(--theme-glass)] backdrop-blur-2xl transition-colors duration-700 ease-in-out`}
+      >
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-1.5 px-3 py-2.5 sm:gap-4 sm:px-8 sm:py-3.5">
           {/* Left: Living Atrium Logo Mark + Wordmark */}
-          <div className="flex items-center gap-2.5 shrink-0">
+          <div className="flex min-w-0 items-center gap-2 shrink-0 sm:gap-2.5">
             <svg
               xmlns="http://www.w3.org/2000/svg"
               viewBox="118 94 276 322"
               fill="none"
               aria-hidden="true"
-              className="h-7 w-6 shrink-0 overflow-visible"
+              className="h-6 w-5 shrink-0 overflow-visible sm:h-7 sm:w-6"
             >
               <defs>
                 <linearGradient
@@ -1097,13 +1103,13 @@ export function AtriumLobby({
                 }}
               />
             </svg>
-            <span className="font-display text-lg font-semibold tracking-tight text-white whitespace-nowrap">
+            <span className="font-display text-base font-semibold tracking-tight text-white whitespace-nowrap sm:text-lg">
               {t.appTitle}
             </span>
           </div>
 
           {/* Right: Liquid Glass Pills (Engine Status, User Persona, Settings, Exit) */}
-          <div className="flex items-center gap-1.5 shrink-0 sm:gap-2">
+          <div className="flex min-w-0 items-center gap-1 shrink-0 sm:gap-2">
             {provider === 'openai' ? (
               <button
                 type="button"
@@ -1114,7 +1120,7 @@ export function AtriumLobby({
                 title={
                   selectedModel.trim() ? t.apiStatusReady : t.apiStatusSetup
                 }
-                className={`inline-flex h-10 w-10 touch-manipulation items-center justify-center gap-2 rounded-full border px-0 text-xs font-medium shadow-[inset_1px_1px_0_rgba(255,255,255,0.16)] backdrop-blur-xl transition-all duration-700 ease-in-out focus-visible:outline-2 focus-visible:outline-[var(--theme-accent)] whitespace-nowrap shrink-0 sm:h-9 sm:w-auto sm:px-3 ${
+                className={`inline-flex h-8 w-8 min-[400px]:h-9 min-[400px]:w-9 touch-manipulation items-center justify-center gap-2 rounded-full border px-0 text-xs font-medium shadow-[inset_1px_1px_0_rgba(255,255,255,0.16)] backdrop-blur-xl transition-all duration-700 ease-in-out focus-visible:outline-2 focus-visible:outline-[var(--theme-accent)] whitespace-nowrap shrink-0 sm:h-9 sm:w-auto sm:px-3 ${
                   selectedModel.trim()
                     ? 'border-[rgba(255,255,255,0.12)] bg-[var(--theme-glass)] text-white/90 hover:border-emerald-300/40 hover:bg-[var(--theme-glass-hover)]'
                     : 'border-amber-300/35 bg-amber-500/[0.12] text-amber-100 hover:border-amber-300/65 hover:bg-amber-500/[0.2]'
@@ -1152,7 +1158,7 @@ export function AtriumLobby({
                       ? t.ollamaStatusReady
                       : t.ollamaStatusChecking
                 }
-                className={`inline-flex h-10 w-10 touch-manipulation items-center justify-center gap-2 rounded-full border px-0 text-xs font-medium shadow-[inset_1px_1px_0_rgba(255,255,255,0.16)] backdrop-blur-xl transition-colors duration-700 ease-in-out focus-visible:outline-2 focus-visible:outline-[var(--theme-accent)] whitespace-nowrap shrink-0 sm:h-9 sm:w-auto sm:px-3 ${
+                className={`inline-flex h-8 w-8 min-[400px]:h-9 min-[400px]:w-9 touch-manipulation items-center justify-center gap-2 rounded-full border px-0 text-xs font-medium shadow-[inset_1px_1px_0_rgba(255,255,255,0.16)] backdrop-blur-xl transition-colors duration-700 ease-in-out focus-visible:outline-2 focus-visible:outline-[var(--theme-accent)] whitespace-nowrap shrink-0 sm:h-9 sm:w-auto sm:px-3 ${
                   ollamaStatus === 'offline'
                     ? 'border-amber-300/35 bg-amber-500/[0.12] text-amber-100 hover:border-amber-300/65 hover:bg-amber-500/[0.2]'
                     : ollamaStatus === 'connected'
@@ -1200,15 +1206,15 @@ export function AtriumLobby({
                 }
                 className={`${
                   isElectronDesktop() ? 'hidden sm:inline-flex' : 'inline-flex'
-                } h-10 touch-manipulation items-center justify-center gap-1.5 rounded-full border px-2.5 text-xs font-medium shadow-[inset_1px_1px_0_rgba(255,255,255,0.16)] backdrop-blur-xl transition-colors duration-700 ease-in-out focus-visible:outline-2 focus-visible:outline-[var(--theme-accent)] whitespace-nowrap shrink-0 sm:h-9 sm:px-3 ${
+                } h-8 w-8 min-[400px]:h-9 min-[400px]:w-auto min-[400px]:px-2.5 touch-manipulation items-center justify-center gap-1.5 rounded-full border px-0 text-xs font-medium shadow-[inset_1px_1px_0_rgba(255,255,255,0.16)] backdrop-blur-xl transition-colors duration-700 ease-in-out focus-visible:outline-2 focus-visible:outline-[var(--theme-accent)] whitespace-nowrap shrink-0 sm:h-9 sm:px-3 ${
                   mobileLinkActive || isMobileClientConnected
                     ? 'border-emerald-300/40 bg-emerald-500/[0.14] text-emerald-100 hover:border-emerald-300/65 hover:bg-emerald-500/[0.22]'
                     : 'border-[rgba(255,255,255,0.12)] bg-[var(--theme-glass)] text-white/90 hover:bg-[var(--theme-glass-hover)] hover:text-white'
                 }`}
               >
-                <Smartphone className="h-3.5 w-3.5 text-[var(--theme-accent)]" />
+                <Smartphone className="h-3.5 w-3.5 shrink-0 text-[var(--theme-accent)]" />
                 {isMobileClientConnected && activeRouteType ? (
-                  <span className="text-[11px] font-semibold">
+                  <span className="hidden min-[420px]:inline text-[11px] font-semibold">
                     {activeRouteType === 'vpn'
                       ? t.mobileLinkRouteVpnBadge
                       : t.mobileLinkRouteLanBadge}
@@ -1224,13 +1230,13 @@ export function AtriumLobby({
                 role="group"
                 aria-label={t.quickLanguageToggleLabel}
                 title={t.quickLanguageToggleLabel}
-                className="inline-flex h-10 shrink-0 items-center rounded-full border border-[rgba(255,255,255,0.12)] bg-[var(--theme-glass)] p-0.5 shadow-[inset_1px_1px_0_rgba(255,255,255,0.14)] backdrop-blur-xl sm:h-9"
+                className="inline-flex h-8 min-[400px]:h-9 shrink-0 items-center rounded-full border border-[rgba(255,255,255,0.12)] bg-[var(--theme-glass)] p-0.5 shadow-[inset_1px_1px_0_rgba(255,255,255,0.14)] backdrop-blur-xl sm:h-9"
               >
                 <button
                   type="button"
                   onClick={() => onChangeLanguage('en')}
                   aria-pressed={language === 'en'}
-                  className={`h-full rounded-full px-2 text-[11px] font-semibold transition-colors ${
+                  className={`h-full rounded-full px-1.5 min-[400px]:px-2 text-[10px] min-[400px]:text-[11px] font-semibold transition-colors ${
                     language === 'en'
                       ? 'bg-[var(--theme-accent)] text-[var(--theme-on-accent)]'
                       : 'text-[var(--theme-muted)] hover:text-white'
@@ -1242,7 +1248,7 @@ export function AtriumLobby({
                   type="button"
                   onClick={() => onChangeLanguage('es')}
                   aria-pressed={language === 'es'}
-                  className={`h-full rounded-full px-2 text-[11px] font-semibold transition-colors ${
+                  className={`h-full rounded-full px-1.5 min-[400px]:px-2 text-[10px] min-[400px]:text-[11px] font-semibold transition-colors ${
                     language === 'es'
                       ? 'bg-[var(--theme-accent)] text-[var(--theme-on-accent)]'
                       : 'text-[var(--theme-muted)] hover:text-white'
@@ -1253,20 +1259,20 @@ export function AtriumLobby({
               </div>
             ) : null}
 
-            <PWAInstallButton t={t} compact />
+            {!isNativeAndroid() ? <PWAInstallButton t={t} compact /> : null}
 
             <button
               type="button"
               onClick={onOpenUserPersona}
               aria-label={t.userPersonaTooltip}
               title={t.userPersonaTooltip}
-              className={`inline-flex h-10 w-10 touch-manipulation items-center justify-center gap-1.5 rounded-full border px-0 text-xs font-medium shadow-[inset_1px_1px_0_rgba(255,255,255,0.16)] backdrop-blur-xl transition-colors duration-700 ease-in-out focus-visible:outline-2 focus-visible:outline-[var(--theme-accent)] whitespace-nowrap shrink-0 sm:h-9 sm:w-auto sm:px-3.5 ${
+              className={`inline-flex h-8 w-8 min-[400px]:h-9 min-[400px]:w-9 touch-manipulation items-center justify-center gap-1.5 rounded-full border px-0 text-xs font-medium shadow-[inset_1px_1px_0_rgba(255,255,255,0.16)] backdrop-blur-xl transition-colors duration-700 ease-in-out focus-visible:outline-2 focus-visible:outline-[var(--theme-accent)] whitespace-nowrap shrink-0 sm:h-9 sm:w-auto sm:px-3.5 ${
                 hasPersonaName
                   ? 'border-[var(--theme-accent)]/45 bg-[var(--theme-accent-soft)] text-white hover:border-[var(--theme-accent)]'
                   : 'border-[rgba(255,255,255,0.12)] bg-[var(--theme-glass)] text-white/85 hover:bg-[var(--theme-glass-hover)] hover:text-white'
               }`}
             >
-              <User className="h-4 w-4 text-[var(--theme-accent)] sm:h-3.5 sm:w-3.5" />
+              <User className="h-3.5 w-3.5 text-[var(--theme-accent)] sm:h-3.5 sm:w-3.5" />
               <span className="hidden max-w-[110px] truncate sm:inline">
                 {t.userPersonaBadgeLabel(userPersona.name)}
               </span>
@@ -1277,9 +1283,9 @@ export function AtriumLobby({
               onClick={onOpenSettings}
               aria-label={t.settingsButton}
               title={t.settingsButton}
-              className="inline-flex h-10 w-10 touch-manipulation items-center justify-center gap-1.5 rounded-full border border-[rgba(255,255,255,0.12)] bg-[var(--theme-glass)] px-0 text-xs font-medium text-white/90 shadow-[inset_1px_1px_0_rgba(255,255,255,0.16)] backdrop-blur-xl transition-colors duration-700 ease-in-out hover:bg-[var(--theme-glass-hover)] hover:text-white focus-visible:outline-2 focus-visible:outline-[var(--theme-accent)] whitespace-nowrap shrink-0 sm:h-9 sm:w-auto sm:px-3.5"
+              className="inline-flex h-8 w-8 min-[400px]:h-9 min-[400px]:w-9 touch-manipulation items-center justify-center gap-1.5 rounded-full border border-[rgba(255,255,255,0.12)] bg-[var(--theme-glass)] px-0 text-xs font-medium text-white/90 shadow-[inset_1px_1px_0_rgba(255,255,255,0.16)] backdrop-blur-xl transition-colors duration-700 ease-in-out hover:bg-[var(--theme-glass-hover)] hover:text-white focus-visible:outline-2 focus-visible:outline-[var(--theme-accent)] whitespace-nowrap shrink-0 sm:h-9 sm:w-auto sm:px-3.5"
             >
-              <Settings className="h-4 w-4 text-[var(--theme-accent)] sm:h-3.5 sm:w-3.5" />
+              <Settings className="h-3.5 w-3.5 text-[var(--theme-accent)] sm:h-3.5 sm:w-3.5" />
               <span className="hidden sm:inline">{t.settingsButton}</span>
             </button>
 
@@ -1288,9 +1294,9 @@ export function AtriumLobby({
               onClick={onExit}
               aria-label={t.lobbyExitButton}
               title={t.lobbyExitButton}
-              className="inline-flex h-10 w-10 touch-manipulation items-center justify-center gap-1.5 rounded-full border border-[rgba(255,255,255,0.12)] bg-[var(--theme-glass)] px-0 text-xs font-medium text-white/75 shadow-[inset_1px_1px_0_rgba(255,255,255,0.14)] backdrop-blur-xl transition-colors duration-700 ease-in-out hover:border-white/25 hover:bg-[var(--theme-glass-hover)] hover:text-white focus-visible:outline-2 focus-visible:outline-[var(--theme-accent)] whitespace-nowrap shrink-0 sm:h-9 sm:w-auto sm:px-3.5"
+              className="inline-flex h-8 w-8 min-[400px]:h-9 min-[400px]:w-9 touch-manipulation items-center justify-center gap-1.5 rounded-full border border-[rgba(255,255,255,0.12)] bg-[var(--theme-glass)] px-0 text-xs font-medium text-white/75 shadow-[inset_1px_1px_0_rgba(255,255,255,0.14)] backdrop-blur-xl transition-colors duration-700 ease-in-out hover:border-white/25 hover:bg-[var(--theme-glass-hover)] hover:text-white focus-visible:outline-2 focus-visible:outline-[var(--theme-accent)] whitespace-nowrap shrink-0 sm:h-9 sm:w-auto sm:px-3.5"
             >
-              <LogOut className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
+              <LogOut className="h-3.5 w-3.5 sm:h-3.5 sm:w-3.5" />
               <span className="hidden sm:inline">{t.lobbyExitButton}</span>
             </button>
           </div>

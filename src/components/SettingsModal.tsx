@@ -73,6 +73,7 @@ import {
   isMobileLinkClient,
   isPublicHttpsApiUrl,
 } from '../utils/mobileSync';
+import { isNativeAndroid } from '../utils/platform';
 import { hasOsSecretStorage } from '../utils/storage';
 import { MessageContent } from './MessageContent';
 import { PocketAiPanel } from './PocketAiPanel';
@@ -841,7 +842,11 @@ export function SettingsModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--theme-modal-backdrop)] px-2 pt-[max(0.5rem,env(safe-area-inset-top))] pb-[max(0.5rem,env(safe-area-inset-bottom))] backdrop-blur-md transition-colors duration-700 ease-in-out sm:p-4"
+      className={`fixed inset-0 z-50 flex items-center justify-center bg-[var(--theme-modal-backdrop)] px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] backdrop-blur-md transition-colors duration-700 ease-in-out sm:p-4 ${
+        isNativeAndroid()
+          ? 'pt-[max(env(safe-area-inset-top),18px)]'
+          : 'pt-[max(0.5rem,env(safe-area-inset-top))]'
+      }`}
       role="dialog"
       aria-modal="true"
       aria-labelledby="ollama-settings-title"
@@ -918,7 +923,7 @@ export function SettingsModal({
               role="tab"
               aria-selected={activeTab === 'connection'}
               onClick={() => setActiveTab('connection')}
-              className={`inline-flex min-w-0 items-center justify-center gap-1.5 rounded-xl px-2 py-2 text-xs font-semibold transition-colors whitespace-nowrap sm:px-3 ${
+              className={`inline-flex min-w-0 items-center justify-center gap-1.5 rounded-xl px-2.5 py-2 text-xs font-semibold transition-colors whitespace-nowrap sm:px-3 ${
                 activeTab === 'connection'
                   ? 'bg-[var(--theme-accent)] text-[var(--theme-on-accent)] shadow-sm'
                   : 'text-[var(--theme-muted)] hover:bg-white/5 hover:text-white'
@@ -934,7 +939,7 @@ export function SettingsModal({
               role="tab"
               aria-selected={activeTab === 'visual'}
               onClick={() => setActiveTab('visual')}
-              className={`inline-flex min-w-0 items-center justify-center gap-1.5 rounded-xl px-2 py-2 text-xs font-semibold transition-colors whitespace-nowrap sm:px-3 ${
+              className={`inline-flex min-w-0 items-center justify-center gap-1.5 rounded-xl px-2.5 py-2 text-xs font-semibold transition-colors whitespace-nowrap sm:px-3 ${
                 activeTab === 'visual'
                   ? 'bg-[var(--theme-accent)] text-[var(--theme-on-accent)] shadow-sm'
                   : 'text-[var(--theme-muted)] hover:bg-white/5 hover:text-white'
@@ -950,7 +955,7 @@ export function SettingsModal({
               role="tab"
               aria-selected={activeTab === 'data'}
               onClick={() => setActiveTab('data')}
-              className={`inline-flex min-w-0 items-center justify-center gap-1.5 rounded-xl px-2 py-2 text-xs font-semibold transition-colors whitespace-nowrap sm:px-3 ${
+              className={`inline-flex min-w-0 items-center justify-center gap-1.5 rounded-xl px-2.5 py-2 text-xs font-semibold transition-colors whitespace-nowrap sm:px-3 ${
                 activeTab === 'data'
                   ? 'bg-[var(--theme-accent)] text-[var(--theme-on-accent)] shadow-sm'
                   : 'text-[var(--theme-muted)] hover:bg-white/5 hover:text-white'

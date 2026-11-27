@@ -589,17 +589,38 @@ function findMatchingSessionId(candidateSessionId) {
   return null;
 }
 
+function extractHeaderToken(headerValue) {
+  if (typeof headerValue === 'string') {
+    return headerValue.trim();
+  }
+  if (Array.isArray(headerValue) && typeof headerValue[0] === 'string') {
+    return headerValue[0].trim();
+  }
+  return '';
+}
+
 function isMobileLinkRequestAuthenticated(req) {
   if (!mobileLinkState.active || !mobileLinkState.token) {
     return false;
   }
 
-  const headerToken = req.headers['x-atrium-link-token'];
-  if (
-    typeof headerToken === 'string' &&
-    timingSafeVerifyToken(headerToken.trim(), mobileLinkState.token)
-  ) {
-    return true;
+  const headerCandidates = [
+    extractHeaderToken(req.headers['x-atrium-token']),
+    extractHeaderToken(req.headers['x-atrium-link-token']),
+  ].filter(Boolean);
+
+  for (const candidate of headerCandidates) {
+    if (timingSafeVerifyToken(candidate, mobileLinkState.token)) {
+      return true;
+    }
+    const matchedHeaderSession = findMatchingSessionId(candidate);
+    if (matchedHeaderSession) {
+      const sessionMeta = mobileLinkState.sessions.get(matchedHeaderSession);
+      if (sessionMeta) {
+        sessionMeta.lastSeenAt = Date.now();
+      }
+      return true;
+    }
   }
 
   const cookies = parseCookies(req.headers.cookie);
@@ -618,7 +639,9 @@ function isMobileLinkRequestAuthenticated(req) {
 }
 
 function resolveMobileDeviceKey(req, parsedUrl) {
-  const rawDeviceId = parsedUrl?.searchParams?.get('deviceId');
+  const rawDeviceId =
+    extractHeaderToken(req.headers['x-atrium-device-id']) ||
+    parsedUrl?.searchParams?.get('deviceId');
   if (typeof rawDeviceId === 'string') {
     const trimmed = rawDeviceId.trim();
     if (/^[a-zA-Z0-9_-]{4,128}$/.test(trimmed)) {
@@ -751,7 +774,8 @@ function buildCorsHeadersForRequest(req) {
   if (!allowedOrigin) return {};
   return {
     'Access-Control-Allow-Origin': allowedOrigin,
-    'Access-Control-Allow-Headers': 'Content-Type, X-Atrium-Link-Token',
+    'Access-Control-Allow-Headers':
+      'Content-Type, X-Atrium-Token, X-Atrium-Device-Id, X-Atrium-Link-Token',
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
     Vary: 'Origin',
   };
@@ -1071,6 +1095,8 @@ function proxyToLocalService(req, res, targetPath, target) {
     if (
       lower === 'host' ||
       lower === 'cookie' ||
+      lower === 'x-atrium-token' ||
+      lower === 'x-atrium-device-id' ||
       lower === 'x-atrium-link-token' ||
       lower === 'connection' ||
       lower === 'keep-alive' ||
@@ -1191,7 +1217,10 @@ function readJsonRequestBody(req, maxBytes) {
 
 async function handleMobileSyncRequest(req, res, parsedUrl) {
   const extraHeaders = {};
-  if (parsedUrl?.searchParams?.has('deviceId')) {
+  const hasDeviceIdentifier =
+    Boolean(extractHeaderToken(req.headers['x-atrium-device-id'])) ||
+    parsedUrl?.searchParams?.has('deviceId');
+  if (hasDeviceIdentifier) {
     const cookies = parseCookies(req.headers.cookie);
     if (!findMatchingSessionId(cookies[MOBILE_LINK_COOKIE_NAME])) {
       const sessionId = crypto.randomBytes(24).toString('hex');
@@ -1375,13 +1404,25 @@ async function handleMobileLinkHttpRequest(req, res) {
 
   const pathname = parsedUrl.pathname || '/';
 
-  // 0. Mobile Link SSE Event Stream & Info (/api/mobile-link/*) - Must run before /api/* Ollama proxy
+  // 0. Mobile Link SSE Event Stream, Info & Sync (/api/mobile-link/*, /api/mobile-sync/*) - Must run before /api/* Ollama proxy
   if (pathname === '/api/mobile-link/events') {
     handleMobileLinkEvents(req, res, parsedUrl);
     return;
   }
   if (pathname === '/api/mobile-link/info') {
     handleMobileLinkInfo(req, res);
+    return;
+  }
+  if (pathname.startsWith('/api/mobile-sync/')) {
+    if (!isMobileLinkRequestAuthenticated(req)) {
+      sendJsonResponse(res, 401, { error: 'Unauthorized' });
+      return;
+    }
+    if (pathname === '/api/mobile-sync/state') {
+      await handleMobileSyncRequest(req, res, parsedUrl);
+      return;
+    }
+    sendJsonResponse(res, 404, { error: 'Not Found' });
     return;
   }
 

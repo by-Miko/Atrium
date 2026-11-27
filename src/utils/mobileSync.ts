@@ -310,9 +310,11 @@ export async function fetchMobileLinkInfo(
   }
 
   const resolvedToken = token ?? getMobileLinkSessionToken();
-  const headers: Record<string, string> = {};
+  const headers: Record<string, string> = {
+    'X-Atrium-Device-Id': getMobileLinkDeviceId(),
+  };
   if (resolvedToken) {
-    headers['X-Atrium-Link-Token'] = resolvedToken;
+    headers['X-Atrium-Token'] = resolvedToken;
   }
 
   const isSameOrigin =
@@ -1026,16 +1028,19 @@ export async function fetchMobileSyncState(
     ''
   );
   const resolvedToken = token ?? getMobileLinkSessionToken();
-  const headers: Record<string, string> = {};
+  const deviceId = getMobileLinkDeviceId();
+  const headers: Record<string, string> = {
+    'X-Atrium-Device-Id': deviceId,
+  };
   if (resolvedToken) {
-    headers['X-Atrium-Link-Token'] = resolvedToken;
+    headers['X-Atrium-Token'] = resolvedToken;
   }
 
   const deviceQuery =
     !resolvedOrigin || isMobileLinkClient()
-      ? `?deviceId=${encodeURIComponent(getMobileLinkDeviceId())}`
+      ? `?deviceId=${encodeURIComponent(deviceId)}`
       : '';
-  const endpoint = `${resolvedOrigin}/mobile-sync/state${deviceQuery}`;
+  const endpoint = `${resolvedOrigin}/api/mobile-sync/state${deviceQuery}`;
   const isSameOrigin =
     !resolvedOrigin ||
     (typeof window !== 'undefined' &&
@@ -1095,18 +1100,20 @@ export async function postMobileSyncState(
     ''
   );
   const resolvedToken = token ?? getMobileLinkSessionToken();
+  const deviceId = getMobileLinkDeviceId();
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
+    'X-Atrium-Device-Id': deviceId,
   };
   if (resolvedToken) {
-    headers['X-Atrium-Link-Token'] = resolvedToken;
+    headers['X-Atrium-Token'] = resolvedToken;
   }
 
   const deviceQuery =
     !resolvedOrigin || isMobileLinkClient()
-      ? `?deviceId=${encodeURIComponent(getMobileLinkDeviceId())}`
+      ? `?deviceId=${encodeURIComponent(deviceId)}`
       : '';
-  const endpoint = `${resolvedOrigin}/mobile-sync/state${deviceQuery}`;
+  const endpoint = `${resolvedOrigin}/api/mobile-sync/state${deviceQuery}`;
   const isSameOrigin =
     !resolvedOrigin ||
     (typeof window !== 'undefined' &&
@@ -1131,5 +1138,118 @@ export async function postMobileSyncState(
   return {
     ok: Boolean(data.ok),
     updatedAt: data.updatedAt,
+  };
+}
+
+/**
+ * Cross-origin SSE subscription using fetch() streaming so native Capacitor Android
+ * (origin http://localhost or capacitor://localhost) can send X-Atrium-Token and
+ * X-Atrium-Device-Id headers across LAN and Mesh VPN routes.
+ */
+export function subscribeMobileLinkEvents(params: {
+  baseOrigin?: string;
+  token?: string | null;
+  onSync: (data: { updatedAt?: number }) => void;
+  onConnected?: (data: { updatedAt?: number }) => void;
+}): () => void {
+  const resolvedOrigin = (params.baseOrigin ?? activeMobileLinkOrigin)
+    .trim()
+    .replace(/\/+$/, '');
+  const resolvedToken = params.token ?? getMobileLinkSessionToken();
+  if (!resolvedOrigin || !resolvedToken) {
+    return () => {};
+  }
+
+  let closed = false;
+  let activeController: AbortController | null = null;
+  let reconnectTimer: number | null = null;
+
+  const dispatchFrame = (rawFrame: string) => {
+    const lines = rawFrame.split(/\r?\n/);
+    let eventName = 'message';
+    const dataLines: string[] = [];
+    for (const line of lines) {
+      if (!line || line.startsWith(':')) continue;
+      if (line.startsWith('event:')) {
+        eventName = line.slice(6).trim();
+      } else if (line.startsWith('data:')) {
+        dataLines.push(line.slice(5).trimStart());
+      }
+    }
+    if (dataLines.length === 0) return;
+    let parsed: { updatedAt?: number };
+    try {
+      parsed = JSON.parse(dataLines.join('\n')) as { updatedAt?: number };
+    } catch {
+      return;
+    }
+    if (eventName === 'sync') {
+      params.onSync(parsed);
+    } else if (eventName === 'connected') {
+      params.onConnected?.(parsed);
+    }
+  };
+
+  const connect = async () => {
+    if (closed) return;
+    activeController = new AbortController();
+    const deviceId = getMobileLinkDeviceId();
+    const url = `${resolvedOrigin}/api/mobile-link/events?deviceId=${encodeURIComponent(deviceId)}`;
+
+    try {
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          Accept: 'text/event-stream',
+          'X-Atrium-Token': resolvedToken,
+          'X-Atrium-Device-Id': deviceId,
+        },
+        signal: activeController.signal,
+      });
+
+      if (!response.ok || !response.body) {
+        throw new Error(`SSE status ${response.status}`);
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (!closed) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        let separatorIndex = buffer.search(/\r?\n\r?\n/);
+        while (separatorIndex !== -1) {
+          const frame = buffer.slice(0, separatorIndex);
+          const match = buffer.slice(separatorIndex).match(/^\r?\n\r?\n/);
+          buffer = buffer.slice(separatorIndex + (match ? match[0].length : 2));
+          dispatchFrame(frame);
+          separatorIndex = buffer.search(/\r?\n\r?\n/);
+        }
+      }
+    } catch {
+      // Transient drop or abort; reconnect below unless closed
+    } finally {
+      activeController = null;
+      if (!closed) {
+        reconnectTimer = window.setTimeout(() => {
+          reconnectTimer = null;
+          void connect();
+        }, 3000);
+      }
+    }
+  };
+
+  void connect();
+
+  return () => {
+    closed = true;
+    if (reconnectTimer !== null) {
+      window.clearTimeout(reconnectTimer);
+      reconnectTimer = null;
+    }
+    activeController?.abort();
+    activeController = null;
   };
 }

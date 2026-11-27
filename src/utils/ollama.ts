@@ -1,6 +1,7 @@
 import type { ApiProvider, OllamaModelTag } from '../types/chat';
 import {
   getActiveMobileLinkOrigin,
+  getMobileLinkDeviceId,
   getMobileLinkSessionToken,
 } from './mobileSync';
 
@@ -313,14 +314,19 @@ function getMobileLinkRequestOptions(
     !activeOrigin ||
     (typeof window !== 'undefined' && activeOrigin === window.location.origin);
   const token = getMobileLinkSessionToken();
+  const deviceId = getMobileLinkDeviceId();
   return {
     ...(isSameOrigin ? { credentials: 'same-origin' as const } : {}),
     headers: token
       ? {
           ...baseHeaders,
-          'X-Atrium-Link-Token': token,
+          'X-Atrium-Token': token,
+          'X-Atrium-Device-Id': deviceId,
         }
-      : baseHeaders,
+      : {
+          ...baseHeaders,
+          'X-Atrium-Device-Id': deviceId,
+        },
   };
 }
 

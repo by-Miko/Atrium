@@ -32,7 +32,7 @@ import {
   scanNativeAndroidQrCode,
   type SmartRouteResolution,
 } from '../utils/mobileSync';
-import { isElectronDesktop } from '../utils/platform';
+import { isElectronDesktop, isNativeAndroid } from '../utils/platform';
 
 interface MobileLinkModalProps {
   t: UIStrings;
@@ -433,7 +433,11 @@ export function MobileLinkModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 px-4 pt-[max(1rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur-md"
+      className={`fixed inset-0 z-50 flex items-center justify-center bg-black/75 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur-md ${
+        isNativeAndroid()
+          ? 'pt-[max(env(safe-area-inset-top),18px)]'
+          : 'pt-[max(1rem,env(safe-area-inset-top))]'
+      }`}
       role="dialog"
       aria-modal="true"
       aria-labelledby="mobile-link-modal-title"

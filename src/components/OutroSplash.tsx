@@ -1,5 +1,6 @@
 import { motion } from 'motion/react';
 import { useEffect, useState } from 'react';
+import { isNativeAndroid } from '../utils/platform';
 
 declare global {
   interface Window {
@@ -39,6 +40,9 @@ export function OutroSplash({
   useEffect(() => {
     const closeTimer = window.setTimeout(() => {
       try {
+        if (isNativeAndroid()) {
+          void window.Capacitor?.Plugins?.App?.exitApp?.();
+        }
         if (window.atriumDesktop?.closeWindow) {
           window.atriumDesktop.closeWindow();
         }

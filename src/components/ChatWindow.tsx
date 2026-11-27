@@ -58,6 +58,7 @@ import type {
   WallpaperFitMode,
 } from '../types/chat';
 import { sanitizeImageUrl } from '../utils/imageUpload';
+import { isNativeAndroid } from '../utils/platform';
 import { sanitizeRenderedText } from '../utils/sanitize';
 import { CharacterIcon } from './CharacterIcon';
 import { MessageContent } from './MessageContent';
@@ -739,7 +740,13 @@ export function ChatWindow({
 
       {/* Minimalist Two-Corner Spatial Top Bar (Collapsible) */}
       {isHeaderCollapsed ? (
-        <div className="pointer-events-none absolute top-[max(0.875rem,env(safe-area-inset-top))] right-4 z-30 flex items-center gap-2 sm:right-6">
+        <div
+          className={`pointer-events-none absolute right-4 z-30 flex items-center gap-2 sm:right-6 ${
+            isNativeAndroid()
+              ? 'top-[max(env(safe-area-inset-top),18px)]'
+              : 'top-[max(0.875rem,env(safe-area-inset-top))]'
+          }`}
+        >
           <button
             type="button"
             onClick={() => {
@@ -778,7 +785,13 @@ export function ChatWindow({
           ) : null}
         </div>
       ) : (
-        <header className="pt-safe relative z-30 shrink-0">
+        <header
+          className={`${
+            isNativeAndroid()
+              ? 'pt-[max(env(safe-area-inset-top),18px)]'
+              : 'pt-safe'
+          } relative z-30 shrink-0`}
+        >
           <div className="flex h-14 items-center justify-between gap-2 px-3 sm:h-auto sm:gap-4 sm:px-6 sm:py-3.5">
         {/* Top-Left: Floating Liquid Glass Lobby Pill + Character Badge Pill */}
         <div
@@ -1143,31 +1156,40 @@ export function ChatWindow({
         </div>
       ) : null}
 
-      {/* Active Pocket AI RAM Guard Chip + Mobile Route Indicator */}
+      {/* Active Pocket AI RAM Guard Pill + Mobile Route Indicator */}
       {!hideBubbles &&
       ((pocketAiState?.isModelLoaded && pocketAiState.activeModelName) ||
         (isMobileClientConnected && activeRouteType)) ? (
         <div className="relative z-10 shrink-0 px-3 pt-1 sm:px-6">
           {renderAdaptiveRow(
-            <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-white/10 bg-[#050507]/70 px-3.5 py-2 text-xs text-white/85 backdrop-blur-xl">
-              <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <div className="flex justify-center sm:justify-start">
+              <div
+                className={`inline-flex max-w-full flex-nowrap items-center gap-2 rounded-full border border-white/10 bg-[#050507]/75 text-xs text-white/90 shadow-[inset_1px_1px_0_rgba(255,255,255,0.14),0_8px_24px_rgba(0,0,0,0.38)] backdrop-blur-xl ${
+                  pocketAiState?.isModelLoaded && onUnloadPocketAiModel
+                    ? 'py-1 pl-3 pr-1'
+                    : 'px-3 py-1.5'
+                }`}
+              >
                 {pocketAiState?.isModelLoaded && pocketAiState.activeModelName ? (
-                  <>
+                  <div className="flex min-w-0 flex-nowrap items-center gap-1.5">
                     <Cpu className="h-3.5 w-3.5 shrink-0 text-[var(--theme-accent)]" />
                     <span className="truncate font-medium text-white">
                       {sanitizeRenderedText(pocketAiState.activeModelName)}
                     </span>
-                    <span className="font-mono text-[11px] text-white/55">
-                      ~{pocketAiState.estimatedActiveRamMb} MB
+                    <span className="shrink-0 whitespace-nowrap font-mono text-[11px] text-white/60">
+                      · ~
+                      {pocketAiState.estimatedActiveRamMb >= 1024
+                        ? `${(pocketAiState.estimatedActiveRamMb / 1024).toFixed(1)} GB`
+                        : `${pocketAiState.estimatedActiveRamMb} MB`}
                     </span>
-                  </>
+                  </div>
                 ) : null}
                 {isMobileClientConnected && activeRouteType ? (
-                  <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-emerald-300">
+                  <span className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap text-[11px] font-medium text-emerald-300">
                     {activeRouteType === 'vpn' ? (
-                      <Globe className="h-3.5 w-3.5" />
+                      <Globe className="h-3 w-3 shrink-0" />
                     ) : (
-                      <Wifi className="h-3.5 w-3.5" />
+                      <Wifi className="h-3 w-3 shrink-0" />
                     )}
                     <span>
                       {activeRouteType === 'vpn'
@@ -1176,20 +1198,35 @@ export function ChatWindow({
                     </span>
                   </span>
                 ) : null}
+                {pocketAiState?.isModelLoaded && onUnloadPocketAiModel ? (
+                  <button
+                    type="button"
+                    onClick={onUnloadPocketAiModel}
+                    aria-label={t.pocketAiUnloadRamButton(
+                      pocketAiState.estimatedActiveRamMb
+                    )}
+                    title={t.pocketAiUnloadRamButton(
+                      pocketAiState.estimatedActiveRamMb
+                    )}
+                    className="inline-flex h-7 w-7 shrink-0 touch-manipulation items-center justify-center rounded-full border border-amber-400/25 bg-amber-500/15 text-amber-100 transition-colors hover:bg-amber-500/30 focus-visible:outline-2 focus-visible:outline-[var(--theme-accent)]"
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      aria-hidden="true"
+                      className="h-3.5 w-3.5"
+                    >
+                      <polygon points="12 5 5 14 19 14 12 5" />
+                      <line x1="5" y1="18" x2="19" y2="18" />
+                    </svg>
+                  </button>
+                ) : null}
               </div>
-
-              {pocketAiState?.isModelLoaded && onUnloadPocketAiModel ? (
-                <button
-                  type="button"
-                  onClick={onUnloadPocketAiModel}
-                  className="inline-flex min-h-[36px] touch-manipulation items-center gap-1.5 rounded-xl border border-amber-400/25 bg-amber-500/15 px-3 py-1.5 text-[11px] font-semibold text-amber-100 transition-colors hover:bg-amber-500/25 focus-visible:outline-2 focus-visible:outline-[var(--theme-accent)]"
-                >
-                  <Trash2 className="h-3.5 w-3.5 shrink-0" />
-                  <span>
-                    {t.pocketAiUnloadRamButton(pocketAiState.estimatedActiveRamMb)}
-                  </span>
-                </button>
-              ) : null}
             </div>
           )}
         </div>

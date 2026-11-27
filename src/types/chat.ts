@@ -329,6 +329,7 @@ export interface CapacitorBridge {
         eventName: 'appStateChange',
         cb: (state: { isActive: boolean }) => void
       ) => Promise<CapacitorPluginListenerHandle> | CapacitorPluginListenerHandle;
+      exitApp?: () => Promise<void> | void;
     };
     BarcodeScanner?: {
       scan?: () => Promise<CapacitorBarcodeScanResult>;

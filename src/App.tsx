@@ -81,6 +81,7 @@ import {
   serializeNormalizedSyncPayload,
   setActiveMobileLinkOrigin,
   setMobileLinkClientActive,
+  subscribeMobileLinkEvents,
   type SmartRouteResolution,
 } from './utils/mobileSync';
 import {
@@ -1462,36 +1463,18 @@ export default function App() {
     streamingCharacterId,
   ]);
 
-  // Persistent SSE connection for Mobile Link clients (same-origin PWA; cross-origin Capacitor uses polling + foreground race)
+  // Persistent SSE connection for Mobile Link clients (EventSource same-origin PWA; fetch stream cross-origin Capacitor LAN/Mesh VPN)
   useEffect(() => {
-    if (
-      !isStorageReady ||
-      !isMobileLinkClient ||
-      isElectronHost ||
-      Boolean(getActiveMobileLinkOrigin()) ||
-      typeof EventSource === 'undefined'
-    ) {
+    if (!isStorageReady || !isMobileLinkClient || isElectronHost) {
       return;
     }
 
-    const eventSource = new EventSource(getMobileLinkEventsUrl());
-
-    const handleRemoteSyncEvent = (event: MessageEvent<string>) => {
+    const triggerSyncPull = (remoteUpdatedAt: number) => {
       if (
         document.visibilityState === 'hidden' ||
         streamingCharIdRef.current !== null ||
         isSyncRequestInFlightRef.current
       ) {
-        return;
-      }
-
-      let remoteUpdatedAt = 0;
-      try {
-        const parsed = JSON.parse(event.data) as { updatedAt?: number };
-        if (typeof parsed?.updatedAt === 'number') {
-          remoteUpdatedAt = parsed.updatedAt;
-        }
-      } catch {
         return;
       }
 
@@ -1531,6 +1514,37 @@ export default function App() {
         });
     };
 
+    const crossOriginTarget = getActiveMobileLinkOrigin();
+    if (crossOriginTarget) {
+      return subscribeMobileLinkEvents({
+        baseOrigin: crossOriginTarget,
+        onSync: (parsed) => {
+          const remoteUpdatedAt =
+            typeof parsed?.updatedAt === 'number' ? parsed.updatedAt : 0;
+          triggerSyncPull(remoteUpdatedAt);
+        },
+      });
+    }
+
+    if (typeof EventSource === 'undefined') {
+      return;
+    }
+
+    const eventSource = new EventSource(getMobileLinkEventsUrl());
+
+    const handleRemoteSyncEvent = (event: MessageEvent<string>) => {
+      let remoteUpdatedAt = 0;
+      try {
+        const parsed = JSON.parse(event.data) as { updatedAt?: number };
+        if (typeof parsed?.updatedAt === 'number') {
+          remoteUpdatedAt = parsed.updatedAt;
+        }
+      } catch {
+        return;
+      }
+      triggerSyncPull(remoteUpdatedAt);
+    };
+
     eventSource.addEventListener(
       'sync',
       handleRemoteSyncEvent as EventListener
@@ -1543,7 +1557,14 @@ export default function App() {
       );
       eventSource.close();
     };
-  }, [applyRemoteSyncSnapshot, isElectronHost, isMobileLinkClient, isStorageReady]);
+  }, [
+    activeSmartRoute,
+    applyRemoteSyncSnapshot,
+    isElectronHost,
+    isMobileLinkClient,
+    isStorageReady,
+    mobilePairingProfile?.activeOrigin,
+  ]);
 
   // Thermal Protection & Background RAM Guard + Smart Dual-Route foreground probe
   useEffect(() => {
