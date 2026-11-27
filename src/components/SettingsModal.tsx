@@ -45,10 +45,16 @@ import type {
   LobbyBackdropMode,
   OllamaModelTag,
   OllamaSettings,
+  PocketAiLocalModelRecord,
+  PocketAiLoopbackPreset,
+  PocketAiMode,
+  PocketAiModelSpec,
+  PocketAiRuntimeState,
   ThemeId,
   UserPersona,
   VisualStudioSettings,
 } from '../types/chat';
+import type { PocketAiDownloadProgress } from '../utils/mobileLocalAi';
 import {
   DEFAULT_NUM_CTX,
   DEFAULT_NUM_PREDICT,
@@ -69,6 +75,7 @@ import {
 } from '../utils/mobileSync';
 import { hasOsSecretStorage } from '../utils/storage';
 import { MessageContent } from './MessageContent';
+import { PocketAiPanel } from './PocketAiPanel';
 
 interface SettingsModalProps {
   t: UIStrings;
@@ -95,6 +102,25 @@ interface SettingsModalProps {
     apiKeyCleared?: boolean;
   }>;
   onReplayGrandIntro: () => void;
+  showPocketAi?: boolean;
+  pocketAiState?: PocketAiRuntimeState;
+  installedPocketModels?: PocketAiLocalModelRecord[];
+  pocketDownloadingModelId?: string | null;
+  pocketDownloadProgress?: PocketAiDownloadProgress | null;
+  pocketLocalAiError?: string | null;
+  onDismissPocketAiError?: () => void;
+  onChangePocketAiMode?: (mode: PocketAiMode) => void;
+  onDownloadPocketAiModel?: (spec: PocketAiModelSpec) => Promise<void>;
+  onCancelPocketAiDownload?: () => void;
+  onImportPocketAiGguf?: (file: File) => Promise<void>;
+  onLoadPocketAiModel?: (model: PocketAiLocalModelRecord) => Promise<void>;
+  onUnloadPocketAiModel?: () => Promise<void>;
+  onRemovePocketAiModel?: (modelId: string) => void;
+  onSelectPocketLoopback?: (
+    provider: ApiProvider,
+    baseUrl: string,
+    preset: PocketAiLoopbackPreset
+  ) => void;
 }
 
 type SettingsTabId = 'connection' | 'visual' | 'data';
@@ -148,6 +174,21 @@ export function SettingsModal({
   onExportBackup,
   onImportBackup,
   onReplayGrandIntro,
+  showPocketAi = false,
+  pocketAiState,
+  installedPocketModels = [],
+  pocketDownloadingModelId = null,
+  pocketDownloadProgress = null,
+  pocketLocalAiError = null,
+  onDismissPocketAiError,
+  onChangePocketAiMode,
+  onDownloadPocketAiModel,
+  onCancelPocketAiDownload,
+  onImportPocketAiGguf,
+  onLoadPocketAiModel,
+  onUnloadPocketAiModel,
+  onRemovePocketAiModel,
+  onSelectPocketLoopback,
 }: SettingsModalProps) {
   const [activeTab, setActiveTab] = useState<SettingsTabId>('connection');
   const [provider, setProvider] = useState<ApiProvider>(
@@ -779,9 +820,28 @@ export function SettingsModal({
     xl: t.textSizeExtraLarge,
   };
 
+  const handleSelectPocketLoopbackInternal = (
+    nextProvider: ApiProvider,
+    nextUrl: string,
+    preset: PocketAiLoopbackPreset
+  ) => {
+    setProvider(nextProvider);
+    setBaseUrl(nextUrl);
+    if (nextProvider === 'openai') {
+      setOpenaiBaseUrlDraft(nextUrl);
+      setIsCustomPresetSelected(true);
+    } else {
+      setOllamaBaseUrlDraft(nextUrl);
+    }
+    setFetchError(null);
+    setFetchSuccessMessage(null);
+    onSelectPocketLoopback?.(nextProvider, nextUrl, preset);
+    void runDiagnostics(nextProvider, nextUrl, apiKey);
+  };
+
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--theme-modal-backdrop)] p-2 backdrop-blur-md transition-colors duration-700 ease-in-out sm:p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--theme-modal-backdrop)] px-2 pt-[max(0.5rem,env(safe-area-inset-top))] pb-[max(0.5rem,env(safe-area-inset-bottom))] backdrop-blur-md transition-colors duration-700 ease-in-out sm:p-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby="ollama-settings-title"
@@ -1418,6 +1478,36 @@ export function SettingsModal({
                     </p>
                   ) : null}
                 </div>
+
+                {/* On-Device Pocket AI Engine (Mobile & Native Android only — never shown on Desktop Electron) */}
+                {showPocketAi && pocketAiState ? (
+                  <PocketAiPanel
+                    t={t}
+                    language={language}
+                    runtimeState={pocketAiState}
+                    installedModels={installedPocketModels}
+                    downloadingModelId={pocketDownloadingModelId}
+                    downloadProgress={pocketDownloadProgress}
+                    localAiError={pocketLocalAiError}
+                    onDismissError={() => onDismissPocketAiError?.()}
+                    onChangeMode={(mode) => onChangePocketAiMode?.(mode)}
+                    onDownloadCatalogModel={async (spec) => {
+                      await onDownloadPocketAiModel?.(spec);
+                    }}
+                    onCancelDownload={() => onCancelPocketAiDownload?.()}
+                    onImportLocalGguf={async (file) => {
+                      await onImportPocketAiGguf?.(file);
+                    }}
+                    onLoadModel={async (model) => {
+                      await onLoadPocketAiModel?.(model);
+                    }}
+                    onUnloadModel={async () => {
+                      await onUnloadPocketAiModel?.();
+                    }}
+                    onRemoveInstalledModel={onRemovePocketAiModel}
+                    onSelectLoopbackEndpoint={handleSelectPocketLoopbackInternal}
+                  />
+                ) : null}
               </>
             ) : null}
 

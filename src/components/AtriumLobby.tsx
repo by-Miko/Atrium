@@ -26,17 +26,26 @@ import type { UIStrings } from '../i18n/translations';
 import type {
   ApiProvider,
   Character,
+  Language,
   LobbyBackdropMode,
+  SmartRouteType,
   UserPersona,
 } from '../types/chat';
 import { sanitizeImageUrl } from '../utils/imageUpload';
 import { parsePngCharacterCard } from '../utils/pngCharacterCard';
+import {
+  isElectronDesktop,
+  isMobileOrAndroidRuntime,
+  isNativeAndroid,
+} from '../utils/platform';
 import { sanitizeRenderedText } from '../utils/sanitize';
 import { CharacterIcon } from './CharacterIcon';
 import { PWAInstallButton } from './PWAInstallButton';
 
 interface AtriumLobbyProps {
   t: UIStrings;
+  language?: Language;
+  onChangeLanguage?: (lang: Language) => void;
   characters: Character[];
   activeCharacterId: string;
   selectedModel: string;
@@ -55,6 +64,8 @@ interface AtriumLobbyProps {
   onOpenSettings: () => void;
   onOpenOllamaSetup: () => void;
   mobileLinkActive?: boolean;
+  isMobileClientConnected?: boolean;
+  activeRouteType?: SmartRouteType | null;
   onOpenMobileLink?: () => void;
   backdropMode?: LobbyBackdropMode;
   onExit: () => void;
@@ -317,6 +328,8 @@ const EDGE_AUTOSCROLL_SPEED_PX = 5;
 
 export function AtriumLobby({
   t,
+  language = 'en',
+  onChangeLanguage,
   characters,
   activeCharacterId,
   selectedModel,
@@ -335,6 +348,8 @@ export function AtriumLobby({
   onOpenSettings,
   onOpenOllamaSetup,
   mobileLinkActive = false,
+  isMobileClientConnected = false,
+  activeRouteType = null,
   onOpenMobileLink,
   backdropMode = 'orbital-clouds',
   onExit,
@@ -1008,7 +1023,7 @@ export function AtriumLobby({
       )}
 
       {/* Top Spatial Header */}
-      <header className="pt-safe relative z-20 shrink-0 border-b border-[rgba(255,255,255,0.12)] bg-[var(--theme-glass)] backdrop-blur-2xl transition-colors duration-700 ease-in-out sm:pt-0">
+      <header className="pt-safe relative z-20 shrink-0 border-b border-[rgba(255,255,255,0.12)] bg-[var(--theme-glass)] backdrop-blur-2xl transition-colors duration-700 ease-in-out">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-2 px-4 py-3 sm:gap-4 sm:px-8 sm:py-3.5">
           {/* Left: Living Atrium Logo Mark + Wordmark */}
           <div className="flex items-center gap-2.5 shrink-0">
@@ -1165,29 +1180,77 @@ export function AtriumLobby({
               </button>
             )}
 
-            {typeof window !== 'undefined' &&
-            Boolean(window.electronAPI?.startMobileLink) &&
-            onOpenMobileLink ? (
+            {onOpenMobileLink &&
+            ((isElectronDesktop() && Boolean(window.electronAPI?.startMobileLink)) ||
+              isNativeAndroid() ||
+              isMobileOrAndroidRuntime() ||
+              isMobileClientConnected) ? (
               <button
                 type="button"
                 onClick={onOpenMobileLink}
-                aria-label={t.mobileLinkTitle}
-                title={t.mobileLinkTitle}
-                className={`hidden sm:inline-flex h-9 touch-manipulation items-center justify-center gap-1.5 rounded-full border px-3 text-xs font-medium shadow-[inset_1px_1px_0_rgba(255,255,255,0.16)] backdrop-blur-xl transition-colors duration-700 ease-in-out focus-visible:outline-2 focus-visible:outline-[var(--theme-accent)] whitespace-nowrap shrink-0 ${
-                  mobileLinkActive
+                aria-label={
+                  isElectronDesktop()
+                    ? t.mobileLinkTitle
+                    : t.mobileLinkClientTitle
+                }
+                title={
+                  isElectronDesktop()
+                    ? t.mobileLinkTitle
+                    : t.mobileLinkClientTitle
+                }
+                className={`${
+                  isElectronDesktop() ? 'hidden sm:inline-flex' : 'inline-flex'
+                } h-10 touch-manipulation items-center justify-center gap-1.5 rounded-full border px-2.5 text-xs font-medium shadow-[inset_1px_1px_0_rgba(255,255,255,0.16)] backdrop-blur-xl transition-colors duration-700 ease-in-out focus-visible:outline-2 focus-visible:outline-[var(--theme-accent)] whitespace-nowrap shrink-0 sm:h-9 sm:px-3 ${
+                  mobileLinkActive || isMobileClientConnected
                     ? 'border-emerald-300/40 bg-emerald-500/[0.14] text-emerald-100 hover:border-emerald-300/65 hover:bg-emerald-500/[0.22]'
                     : 'border-[rgba(255,255,255,0.12)] bg-[var(--theme-glass)] text-white/90 hover:bg-[var(--theme-glass-hover)] hover:text-white'
                 }`}
               >
                 <Smartphone className="h-3.5 w-3.5 text-[var(--theme-accent)]" />
-                <span>{t.mobileLinkButton}</span>
-                {mobileLinkActive ? (
-                  <span
-                    aria-hidden="true"
-                    className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.9)]"
-                  />
-                ) : null}
+                {isMobileClientConnected && activeRouteType ? (
+                  <span className="text-[11px] font-semibold">
+                    {activeRouteType === 'vpn'
+                      ? t.mobileLinkRouteVpnBadge
+                      : t.mobileLinkRouteLanBadge}
+                  </span>
+                ) : (
+                  <span className="hidden sm:inline">{t.mobileLinkButton}</span>
+                )}
               </button>
+            ) : null}
+
+            {onChangeLanguage ? (
+              <div
+                role="group"
+                aria-label={t.quickLanguageToggleLabel}
+                title={t.quickLanguageToggleLabel}
+                className="inline-flex h-10 shrink-0 items-center rounded-full border border-[rgba(255,255,255,0.12)] bg-[var(--theme-glass)] p-0.5 shadow-[inset_1px_1px_0_rgba(255,255,255,0.14)] backdrop-blur-xl sm:h-9"
+              >
+                <button
+                  type="button"
+                  onClick={() => onChangeLanguage('en')}
+                  aria-pressed={language === 'en'}
+                  className={`h-full rounded-full px-2 text-[11px] font-semibold transition-colors ${
+                    language === 'en'
+                      ? 'bg-[var(--theme-accent)] text-[var(--theme-on-accent)]'
+                      : 'text-[var(--theme-muted)] hover:text-white'
+                  }`}
+                >
+                  EN
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onChangeLanguage('es')}
+                  aria-pressed={language === 'es'}
+                  className={`h-full rounded-full px-2 text-[11px] font-semibold transition-colors ${
+                    language === 'es'
+                      ? 'bg-[var(--theme-accent)] text-[var(--theme-on-accent)]'
+                      : 'text-[var(--theme-muted)] hover:text-white'
+                  }`}
+                >
+                  ES
+                </button>
+              </div>
             ) : null}
 
             <PWAInstallButton t={t} compact />

@@ -213,8 +213,142 @@ export interface ElectronAPI {
   getMobileLinkStatus?: () => Promise<MobileLinkStatus>;
 }
 
+export type SmartRouteType = 'lan' | 'vpn';
+
+export interface MobilePairingProfile {
+  lanUrl?: string;
+  vpnUrl?: string;
+  vpnProvider?: MeshVpnProvider | null;
+  hostLabel?: string;
+  activeRouteType?: SmartRouteType;
+  activeOrigin?: string;
+  lastLatencyMs?: number | null;
+  updatedAt: number;
+}
+
+export interface MobileLinkInfoResponse {
+  active: boolean;
+  port: number | null;
+  lanUrl?: string | null;
+  vpnUrl?: string | null;
+  vpnProvider?: MeshVpnProvider | null;
+  vpnProviders?: MeshVpnProvider[];
+  urls?: MobileLinkUrls;
+  connectedClients?: number;
+  lastSyncAt?: number | null;
+}
+
+export type MemoryTierId = 'compact' | 'performance';
+
+export type PocketAiMode = 'embedded-gguf' | 'local-loopback';
+
+export type PocketAiLoopbackPreset = 'ollama' | 'llama-cpp';
+
+export interface PocketAiModelSpec {
+  id: string;
+  name: string;
+  paramsLabel: string;
+  quantization: string;
+  downloadSizeMb: number;
+  estimatedRamMb: number;
+  tier: MemoryTierId;
+  downloadUrl: string;
+  filename: string;
+  descriptionEn: string;
+  descriptionEs: string;
+}
+
+export interface PocketAiLocalModelRecord {
+  id: string;
+  name: string;
+  filename: string;
+  sizeBytes: number;
+  estimatedRamMb: number;
+  source: 'downloaded' | 'imported' | 'native';
+  verifiedGguf: boolean;
+  addedAt: number;
+}
+
+export interface PocketAiRuntimeState {
+  mode: PocketAiMode;
+  loopbackPreset: PocketAiLoopbackPreset;
+  deviceMemoryGb: number;
+  memoryMeasured: boolean;
+  recommendedTier: MemoryTierId;
+  activeModelId: string | null;
+  activeModelName: string | null;
+  isModelLoaded: boolean;
+  estimatedActiveRamMb: number;
+  autoUnloadDelaySec: number;
+  lastAutoUnloadAt: number | null;
+  nativeBridgeAvailable: boolean;
+}
+
+export interface CapacitorPluginListenerHandle {
+  remove: () => Promise<void> | void;
+}
+
+export interface CapacitorBarcodeScanResult {
+  hasContent?: boolean;
+  content?: string;
+  rawValue?: string;
+  barcodes?: Array<{ rawValue?: string; displayValue?: string }>;
+}
+
+export interface CapacitorAtriumLocalAiPlugin {
+  getDeviceMemoryGb?: () => Promise<{ totalGb?: number }>;
+  downloadModel?: (options: {
+    id: string;
+    url: string;
+    filename: string;
+  }) => Promise<{ ok: boolean; path?: string; sizeBytes?: number; error?: string }>;
+  loadModel?: (options: {
+    id: string;
+    filename?: string;
+    contextLength?: number;
+  }) => Promise<{ ok: boolean; estimatedRamMb?: number; error?: string }>;
+  unloadModel?: () => Promise<{ ok: boolean }>;
+  generateChat?: (options: {
+    modelId: string;
+    messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>;
+    temperature?: number;
+    maxTokens?: number;
+  }) => Promise<{ text?: string; error?: string }>;
+  addListener?: (
+    eventName: 'downloadProgress' | 'token' | 'memoryWarning',
+    cb: (data: Record<string, unknown>) => void
+  ) => Promise<CapacitorPluginListenerHandle> | CapacitorPluginListenerHandle;
+}
+
+export interface CapacitorBridge {
+  isNativePlatform?: () => boolean;
+  getPlatform?: () => string;
+  Plugins?: {
+    App?: {
+      addListener?: (
+        eventName: 'appStateChange',
+        cb: (state: { isActive: boolean }) => void
+      ) => Promise<CapacitorPluginListenerHandle> | CapacitorPluginListenerHandle;
+    };
+    BarcodeScanner?: {
+      scan?: () => Promise<CapacitorBarcodeScanResult>;
+      startScan?: () => Promise<CapacitorBarcodeScanResult>;
+      requestPermissions?: () => Promise<{ camera?: string }>;
+    };
+    BarcodeScanning?: {
+      scan?: () => Promise<CapacitorBarcodeScanResult>;
+      requestPermissions?: () => Promise<{ camera?: string }>;
+    };
+    MLKitBarcodeScanning?: {
+      scan?: () => Promise<CapacitorBarcodeScanResult>;
+    };
+    AtriumLocalAi?: CapacitorAtriumLocalAiPlugin;
+  };
+}
+
 declare global {
   interface Window {
     electronAPI?: ElectronAPI;
+    Capacitor?: CapacitorBridge;
   }
 }

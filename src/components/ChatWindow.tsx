@@ -9,8 +9,10 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronUp,
+  Cpu,
   Eye,
   EyeOff,
+  Globe,
   Layers,
   Mic,
   MicOff,
@@ -20,9 +22,11 @@ import {
   RefreshCw,
   RotateCcw,
   Settings,
+  Smartphone,
   Square,
   Trash2,
   User,
+  Wifi,
   X,
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
@@ -47,6 +51,8 @@ import type {
   Character,
   ChatMessage,
   Language,
+  PocketAiRuntimeState,
+  SmartRouteType,
   StoryMemoryEntry,
   UserPersona,
   WallpaperFitMode,
@@ -97,6 +103,13 @@ interface ChatWindowProps {
   storyMemory?: StoryMemoryEntry;
   onOpenStoryMemory: () => void;
   onDismissError: () => void;
+  showPocketAiOfflineCard?: boolean;
+  pocketAiState?: PocketAiRuntimeState;
+  activeRouteType?: SmartRouteType | null;
+  isMobileClientConnected?: boolean;
+  onOpenPocketAiSetup?: () => void;
+  onOpenMobileLinkPairing?: () => void;
+  onUnloadPocketAiModel?: () => void;
 }
 
 function formatMessageTime(timestamp: number): string {
@@ -140,6 +153,13 @@ export function ChatWindow({
   storyMemory,
   onOpenStoryMemory,
   onDismissError,
+  showPocketAiOfflineCard = false,
+  pocketAiState,
+  activeRouteType = null,
+  isMobileClientConnected = false,
+  onOpenPocketAiSetup,
+  onOpenMobileLinkPairing,
+  onUnloadPocketAiModel,
 }: ChatWindowProps) {
   const [draft, setDraft] = useState('');
   const [wallpaperFailed, setWallpaperFailed] = useState(false);
@@ -719,7 +739,7 @@ export function ChatWindow({
 
       {/* Minimalist Two-Corner Spatial Top Bar (Collapsible) */}
       {isHeaderCollapsed ? (
-        <div className="pt-safe pointer-events-none absolute top-3.5 right-4 z-30 flex items-center gap-2 sm:pt-0 sm:right-6">
+        <div className="pointer-events-none absolute top-[max(0.875rem,env(safe-area-inset-top))] right-4 z-30 flex items-center gap-2 sm:right-6">
           <button
             type="button"
             onClick={() => {
@@ -758,7 +778,7 @@ export function ChatWindow({
           ) : null}
         </div>
       ) : (
-        <header className="pt-safe relative z-30 shrink-0 sm:pt-0">
+        <header className="pt-safe relative z-30 shrink-0">
           <div className="flex h-14 items-center justify-between gap-2 px-3 sm:h-auto sm:gap-4 sm:px-6 sm:py-3.5">
         {/* Top-Left: Floating Liquid Glass Lobby Pill + Character Badge Pill */}
         <div
@@ -828,8 +848,22 @@ export function ChatWindow({
                 <span>{safeCharacterRole}</span>
                 <span aria-hidden="true"> · </span>
                 <span className="font-mono">
-                  {safeSelectedModel || t.noModelSelected}
+                  {pocketAiState?.mode === 'embedded-gguf' &&
+                  pocketAiState.isModelLoaded &&
+                  pocketAiState.activeModelName
+                    ? sanitizeRenderedText(pocketAiState.activeModelName)
+                    : safeSelectedModel || t.noModelSelected}
                 </span>
+                {isMobileClientConnected && activeRouteType ? (
+                  <>
+                    <span aria-hidden="true"> · </span>
+                    <span className="text-[var(--theme-accent)]">
+                      {activeRouteType === 'vpn'
+                        ? t.mobileLinkRouteVpnBadge
+                        : t.mobileLinkRouteLanBadge}
+                    </span>
+                  </>
+                ) : null}
               </p>
             </div>
           </button>
@@ -1109,6 +1143,58 @@ export function ChatWindow({
         </div>
       ) : null}
 
+      {/* Active Pocket AI RAM Guard Chip + Mobile Route Indicator */}
+      {!hideBubbles &&
+      ((pocketAiState?.isModelLoaded && pocketAiState.activeModelName) ||
+        (isMobileClientConnected && activeRouteType)) ? (
+        <div className="relative z-10 shrink-0 px-3 pt-1 sm:px-6">
+          {renderAdaptiveRow(
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-white/10 bg-[#050507]/70 px-3.5 py-2 text-xs text-white/85 backdrop-blur-xl">
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                {pocketAiState?.isModelLoaded && pocketAiState.activeModelName ? (
+                  <>
+                    <Cpu className="h-3.5 w-3.5 shrink-0 text-[var(--theme-accent)]" />
+                    <span className="truncate font-medium text-white">
+                      {sanitizeRenderedText(pocketAiState.activeModelName)}
+                    </span>
+                    <span className="font-mono text-[11px] text-white/55">
+                      ~{pocketAiState.estimatedActiveRamMb} MB
+                    </span>
+                  </>
+                ) : null}
+                {isMobileClientConnected && activeRouteType ? (
+                  <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-emerald-300">
+                    {activeRouteType === 'vpn' ? (
+                      <Globe className="h-3.5 w-3.5" />
+                    ) : (
+                      <Wifi className="h-3.5 w-3.5" />
+                    )}
+                    <span>
+                      {activeRouteType === 'vpn'
+                        ? t.mobileLinkRouteVpnBadge
+                        : t.mobileLinkRouteLanBadge}
+                    </span>
+                  </span>
+                ) : null}
+              </div>
+
+              {pocketAiState?.isModelLoaded && onUnloadPocketAiModel ? (
+                <button
+                  type="button"
+                  onClick={onUnloadPocketAiModel}
+                  className="inline-flex min-h-[36px] touch-manipulation items-center gap-1.5 rounded-xl border border-amber-400/25 bg-amber-500/15 px-3 py-1.5 text-[11px] font-semibold text-amber-100 transition-colors hover:bg-amber-500/25 focus-visible:outline-2 focus-visible:outline-[var(--theme-accent)]"
+                >
+                  <Trash2 className="h-3.5 w-3.5 shrink-0" />
+                  <span>
+                    {t.pocketAiUnloadRamButton(pocketAiState.estimatedActiveRamMb)}
+                  </span>
+                </button>
+              ) : null}
+            </div>
+          )}
+        </div>
+      ) : null}
+
       {/* Message Feed */}
       <motion.div
         ref={scrollContainerRef}
@@ -1124,6 +1210,54 @@ export function ChatWindow({
       >
         {renderAdaptiveRow(
           <>
+          {showPocketAiOfflineCard && !hideBubbles ? (
+            <div className="rounded-3xl border border-white/10 bg-[#050507]/75 p-4 text-white shadow-[0_14px_40px_rgba(0,0,0,0.45)] backdrop-blur-xl">
+              <div className="flex items-start gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-[var(--theme-accent-soft)] text-[var(--theme-accent)]">
+                  <Cpu className="h-5 w-5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="font-display text-sm font-semibold text-white">
+                      {t.pocketAiTitle}
+                    </h3>
+                    <span className="font-mono text-[11px] font-medium text-[var(--theme-accent)]">
+                      {t.pocketAiOfflineBadge}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs leading-relaxed text-white/70">
+                    {t.pocketAiCardSubtitle}
+                  </p>
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    {onOpenPocketAiSetup ? (
+                      <button
+                        type="button"
+                        onClick={onOpenPocketAiSetup}
+                        className="inline-flex min-h-[44px] touch-manipulation items-center gap-1.5 rounded-2xl px-4 py-2 text-xs font-semibold transition-all hover:brightness-110 focus-visible:outline-2 focus-visible:outline-[var(--theme-accent)]"
+                        style={{
+                          backgroundColor: 'var(--theme-accent)',
+                          color: 'var(--theme-on-accent)',
+                        }}
+                      >
+                        <Cpu className="h-4 w-4 shrink-0" />
+                        <span>{t.pocketAiOpenSetupButton}</span>
+                      </button>
+                    ) : null}
+                    {onOpenMobileLinkPairing ? (
+                      <button
+                        type="button"
+                        onClick={onOpenMobileLinkPairing}
+                        className="inline-flex min-h-[44px] touch-manipulation items-center gap-1.5 rounded-2xl border border-white/15 bg-white/5 px-4 py-2 text-xs font-medium text-white/90 transition-colors hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-[var(--theme-accent)]"
+                      >
+                        <Smartphone className="h-4 w-4 shrink-0 text-[var(--theme-accent)]" />
+                        <span>{t.pocketAiLinkDesktopButton}</span>
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : null}
           {hiddenOlderCount > 0 ? (
             <div className="flex justify-center pb-1">
               <button

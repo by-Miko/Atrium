@@ -1,6 +1,3 @@
-import React from 'react';
-import { LandingShell } from './components/LandingShell';
-import { isWebEdition } from './utils/webEnvironment';
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
@@ -28,13 +25,21 @@ import {
   getThemeCssVariables,
 } from './themes/palettes';
 import type {
+  ApiProvider,
   BubbleSchemeId,
   Character,
   ChatMessage,
   Language,
   MobileLinkStatus,
+  MobilePairingProfile,
   MobileSyncStatePayload,
   OllamaSettings,
+  PocketAiLocalModelRecord,
+  PocketAiLoopbackPreset,
+  PocketAiMode,
+  PocketAiModelSpec,
+  PocketAiRuntimeState,
+  SmartRouteType,
   StoryMemoryEntry,
   ThemeId,
   UserPersona,
@@ -46,18 +51,37 @@ import {
   parseAtriumBackupFile,
 } from './utils/backup';
 import {
+  createInitialPocketAiRuntimeState,
+  downloadAndVerifyPocketAiModel,
+  inspectDeviceMemoryTier,
+  loadInstalledPocketAiModels,
+  loadNativePocketAiModel,
+  saveInstalledPocketAiModels,
+  savePocketAiConfig,
+  unloadNativePocketAiModel,
+  verifyAndImportLocalGgufFile,
+  type PocketAiDownloadProgress,
+} from './utils/mobileLocalAi';
+import {
   bootstrapMobileLinkSession,
   buildMobileSyncPayload,
+  clearMobileLinkSessionToken,
   computeMobileSyncContentFingerprint,
   computeMobileSyncSignature,
   computeMobileSyncStateHash,
   fetchMobileSyncState,
+  getActiveMobileLinkOrigin,
   getMobileLinkEventsUrl,
   isLocalLoopbackUrl,
   isPublicHttpsApiUrl,
+  loadMobilePairingProfile,
   postMobileSyncState,
+  resolveBestMobileLinkRoute,
+  saveMobilePairingProfile,
   serializeNormalizedSyncPayload,
+  setActiveMobileLinkOrigin,
   setMobileLinkClientActive,
+  type SmartRouteResolution,
 } from './utils/mobileSync';
 import {
   DEFAULT_OLLAMA_URL,
@@ -66,6 +90,7 @@ import {
   streamProviderChat,
   summarizeConversationMemory,
 } from './utils/ollama';
+import { isMobileOrAndroidRuntime } from './utils/platform';
 import {
   DEFAULT_OLLAMA_SETTINGS,
   DEFAULT_USER_PERSONA,
@@ -80,6 +105,7 @@ import {
   loadSavedLobbyBackdropMode,
   saveApiKeySecurely,
   saveCharacterOrder,
+  saveLanguagePreference,
   saveLobbyBackdropMode,
   saveMobileSyncUpdatedAt,
   stripSecretFromSettings,
@@ -207,8 +233,6 @@ function resolveInitialIntroMode(): 'grand' | 'quick' {
 }
 
 export default function App() {
-  const [showLanding, setShowLanding] = React.useState(() => isWebEdition() && !new URLSearchParams(window.location.search).has('app'));
-  if (showLanding) return <LandingShell onEnterApp={() => setShowLanding(false)} />;
   const [characterOrder, setCharacterOrder] = useState<string[]>(() =>
     loadSavedCharacterOrder()
   );
@@ -280,6 +304,7 @@ export default function App() {
   );
   const isElectronHost =
     typeof window !== 'undefined' && Boolean(window.electronAPI?.isElectron);
+  const isMobileClientRuntime = !isElectronHost && isMobileOrAndroidRuntime();
   const [isMobileLinkClient, setIsMobileLinkClient] = useState<boolean>(
     () =>
       !isElectronHost &&
@@ -287,14 +312,39 @@ export default function App() {
         initialMobileLinkSession.hadUrlToken || initialMobileLinkSession.token
       )
   );
+  const [mobilePairingProfile, setMobilePairingProfile] =
+    useState<MobilePairingProfile | null>(() =>
+      !isElectronHost ? loadMobilePairingProfile() : null
+    );
+  const [activeSmartRoute, setActiveSmartRoute] =
+    useState<SmartRouteType | null>(() =>
+      !isElectronHost ? loadMobilePairingProfile()?.activeRouteType ?? null : null
+    );
   const [mobileLinkStatus, setMobileLinkStatus] = useState<MobileLinkStatus>(
     EMPTY_MOBILE_LINK_STATUS
   );
   const [isMobileLinkModalOpen, setIsMobileLinkModalOpen] = useState(false);
 
+  const [pocketAiState, setPocketAiState] = useState<PocketAiRuntimeState>(() =>
+    createInitialPocketAiRuntimeState()
+  );
+  const [installedPocketModels, setInstalledPocketModels] = useState<
+    PocketAiLocalModelRecord[]
+  >([]);
+  const [pocketDownloadingModelId, setPocketDownloadingModelId] = useState<
+    string | null
+  >(null);
+  const [pocketDownloadProgress, setPocketDownloadProgress] =
+    useState<PocketAiDownloadProgress | null>(null);
+  const [pocketLocalAiError, setPocketLocalAiError] = useState<string | null>(
+    null
+  );
+
   const t = TRANSLATIONS[language];
 
   const abortControllerRef = useRef<AbortController | null>(null);
+  const pocketDownloadAbortRef = useRef<AbortController | null>(null);
+  const backgroundUnloadTimerRef = useRef<number | null>(null);
   const charactersRef = useRef(characters);
   charactersRef.current = characters;
   const conversationsRef = useRef(conversations);
@@ -317,6 +367,12 @@ export default function App() {
   isSettingsOpenRef.current = isSettingsOpen;
   const streamingCharIdRef = useRef<string | null>(null);
   streamingCharIdRef.current = streamingCharacterId;
+  const mobilePairingProfileRef = useRef(mobilePairingProfile);
+  mobilePairingProfileRef.current = mobilePairingProfile;
+  const isMobileLinkClientRef = useRef(isMobileLinkClient);
+  isMobileLinkClientRef.current = isMobileLinkClient;
+  const pocketAiStateRef = useRef(pocketAiState);
+  pocketAiStateRef.current = pocketAiState;
 
   useEffect(() => {
     if (introMode === 'grand') {
@@ -713,29 +769,72 @@ export default function App() {
         );
       let startupRemoteSnapshot: MobileSyncStatePayload | null = null;
 
-      if (
-        !isElectronHost &&
-        typeof window !== 'undefined' &&
-        (clientModeActive || window.location.protocol.startsWith('http'))
-      ) {
-        try {
-          startupRemoteSnapshot = await fetchMobileSyncState(
-            '',
-            initialMobileLinkSession.token,
-            probeController.signal
-          );
-          if (cancelled) return;
-          if (startupRemoteSnapshot !== null) {
-            clientModeActive = true;
+      if (!isElectronHost) {
+        const savedProfile = loadMobilePairingProfile();
+        if (savedProfile && initialMobileLinkSession.token) {
+          try {
+            const resolution = await resolveBestMobileLinkRoute(
+              savedProfile,
+              initialMobileLinkSession.token
+            );
+            if (cancelled) return;
+            if (resolution) {
+              setMobilePairingProfile(resolution.profile);
+              setActiveSmartRoute(resolution.routeType);
+              clientModeActive = true;
+              startupRemoteSnapshot = await fetchMobileSyncState(
+                resolution.origin,
+                initialMobileLinkSession.token,
+                probeController.signal
+              );
+              if (cancelled) return;
+            }
+          } catch {
+            // Fall back to direct origin probe below
           }
-        } catch {
-          // Not running behind an authenticated Mobile Link host
+        }
+
+        if (
+          !startupRemoteSnapshot &&
+          typeof window !== 'undefined' &&
+          (clientModeActive || window.location.protocol.startsWith('http'))
+        ) {
+          try {
+            startupRemoteSnapshot = await fetchMobileSyncState(
+              '',
+              initialMobileLinkSession.token,
+              probeController.signal
+            );
+            if (cancelled) return;
+            if (startupRemoteSnapshot !== null) {
+              clientModeActive = true;
+            }
+          } catch {
+            // Not running behind an authenticated Mobile Link host
+          }
         }
       }
 
       if (clientModeActive) {
         setMobileLinkClientActive(true);
         setIsMobileLinkClient(true);
+      }
+
+      if (isMobileClientRuntime) {
+        void Promise.all([
+          inspectDeviceMemoryTier(),
+          loadInstalledPocketAiModels(),
+        ]).then(([memInfo, savedPocketModels]) => {
+          if (cancelled) return;
+          setPocketAiState((prev) => ({
+            ...prev,
+            deviceMemoryGb: memInfo.deviceMemoryGb,
+            memoryMeasured: memInfo.measured,
+            recommendedTier: memInfo.recommendedTier,
+            autoUnloadDelaySec: memInfo.autoUnloadDelaySec,
+          }));
+          setInstalledPocketModels(savedPocketModels);
+        });
       }
 
       const effectiveClientSettings =
@@ -870,7 +969,12 @@ export default function App() {
         window.clearTimeout(probeTimeout);
       }
     };
-  }, [applyRemoteSyncSnapshot, initialMobileLinkSession, isElectronHost]);
+  }, [
+    applyRemoteSyncSnapshot,
+    initialMobileLinkSession,
+    isElectronHost,
+    isMobileClientRuntime,
+  ]);
 
   useEffect(() => {
     document.documentElement.lang = language;
@@ -926,6 +1030,7 @@ export default function App() {
   useEffect(() => {
     if (!isStorageReady) return;
     void idbSet(STORAGE_KEYS.language, language);
+    saveLanguagePreference(language);
   }, [isStorageReady, language]);
 
   useEffect(() => {
@@ -1357,12 +1462,13 @@ export default function App() {
     streamingCharacterId,
   ]);
 
-  // Persistent SSE connection for Mobile Link clients (exact physical device tracking + instant sync notifications)
+  // Persistent SSE connection for Mobile Link clients (same-origin PWA; cross-origin Capacitor uses polling + foreground race)
   useEffect(() => {
     if (
       !isStorageReady ||
       !isMobileLinkClient ||
       isElectronHost ||
+      Boolean(getActiveMobileLinkOrigin()) ||
       typeof EventSource === 'undefined'
     ) {
       return;
@@ -1439,10 +1545,374 @@ export default function App() {
     };
   }, [applyRemoteSyncSnapshot, isElectronHost, isMobileLinkClient, isStorageReady]);
 
+  // Thermal Protection & Background RAM Guard + Smart Dual-Route foreground probe
+  useEffect(() => {
+    if (typeof document === 'undefined' || isElectronHost) return;
+
+    const handleEnterBackground = () => {
+      if (streamingCharIdRef.current !== null) {
+        stopStreaming();
+      }
+      if (pocketDownloadAbortRef.current) {
+        pocketDownloadAbortRef.current.abort();
+        pocketDownloadAbortRef.current = null;
+        setPocketDownloadingModelId(null);
+        setPocketDownloadProgress(null);
+      }
+      if (pocketAiStateRef.current.isModelLoaded) {
+        if (backgroundUnloadTimerRef.current !== null) {
+          window.clearTimeout(backgroundUnloadTimerRef.current);
+        }
+        const delayMs = pocketAiStateRef.current.autoUnloadDelaySec * 1000;
+        backgroundUnloadTimerRef.current = window.setTimeout(() => {
+          backgroundUnloadTimerRef.current = null;
+          void unloadNativePocketAiModel();
+          setPocketAiState((prev) =>
+            prev.isModelLoaded
+              ? {
+                  ...prev,
+                  isModelLoaded: false,
+                  activeModelId: null,
+                  activeModelName: null,
+                  estimatedActiveRamMb: 0,
+                  lastAutoUnloadAt: Date.now(),
+                }
+              : prev
+          );
+        }, delayMs);
+      }
+    };
+
+    const handleReturnForeground = () => {
+      if (backgroundUnloadTimerRef.current !== null) {
+        window.clearTimeout(backgroundUnloadTimerRef.current);
+        backgroundUnloadTimerRef.current = null;
+      }
+      if (isMobileLinkClientRef.current && mobilePairingProfileRef.current) {
+        void resolveBestMobileLinkRoute(mobilePairingProfileRef.current).then(
+          (res) => {
+            if (!res) return;
+            setMobilePairingProfile(res.profile);
+            setActiveSmartRoute(res.routeType);
+            void fetchMobileSyncState(res.origin)
+              .then((remote) => {
+                if (remote && streamingCharIdRef.current === null) {
+                  applyRemoteSyncSnapshot(remote, true);
+                }
+              })
+              .catch(() => {});
+          }
+        );
+      }
+    };
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        handleEnterBackground();
+      } else {
+        handleReturnForeground();
+      }
+    };
+
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
+    let appStateHandle: { remove: () => Promise<void> | void } | undefined;
+    const appPlugin = window.Capacitor?.Plugins?.App;
+    if (appPlugin?.addListener) {
+      const maybePromise = appPlugin.addListener('appStateChange', (state) => {
+        if (!state.isActive) {
+          handleEnterBackground();
+        } else {
+          handleReturnForeground();
+        }
+      });
+      if (maybePromise && typeof (maybePromise as Promise<unknown>).then === 'function') {
+        void (maybePromise as Promise<{ remove: () => Promise<void> | void }>).then(
+          (handle) => {
+            appStateHandle = handle;
+          }
+        );
+      } else {
+        appStateHandle = maybePromise as { remove: () => Promise<void> | void };
+      }
+    }
+
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      void appStateHandle?.remove?.();
+      if (backgroundUnloadTimerRef.current !== null) {
+        window.clearTimeout(backgroundUnloadTimerRef.current);
+        backgroundUnloadTimerRef.current = null;
+      }
+    };
+  }, [applyRemoteSyncSnapshot, isElectronHost, stopStreaming]);
+
+  const handlePairClientSuccess = useCallback(
+    async (resolution: SmartRouteResolution) => {
+      setMobilePairingProfile(resolution.profile);
+      setActiveSmartRoute(resolution.routeType);
+      setMobileLinkClientActive(true);
+      setIsMobileLinkClient(true);
+      setErrorMessage(null);
+      try {
+        const remote = await fetchMobileSyncState(resolution.origin);
+        if (remote) {
+          applyRemoteSyncSnapshot(remote, true);
+        }
+        const provider = settings.provider ?? 'ollama';
+        if (provider === 'ollama' || settings.baseUrl === '/v1') {
+          const models = await fetchProviderModels(
+            provider,
+            provider === 'ollama' ? '/api' : '/v1',
+            settings.apiKey
+          );
+          setOllamaStatus('connected');
+          if (models.length > 0) {
+            setSettings((prev) => ({
+              ...prev,
+              availableModels: models,
+              selectedModel: prev.selectedModel || models[0].name,
+            }));
+          }
+        }
+      } catch {
+        // Polling & foreground reconnect handle recovery
+      }
+    },
+    [applyRemoteSyncSnapshot, settings.apiKey, settings.baseUrl, settings.provider]
+  );
+
+  const handleReconnectDualRoute =
+    useCallback(async (): Promise<SmartRouteResolution | null> => {
+      const profile = mobilePairingProfileRef.current;
+      if (!profile) return null;
+      const resolution = await resolveBestMobileLinkRoute(profile);
+      if (!resolution) return null;
+      setMobilePairingProfile(resolution.profile);
+      setActiveSmartRoute(resolution.routeType);
+      try {
+        const remote = await fetchMobileSyncState(resolution.origin);
+        if (remote && streamingCharIdRef.current === null) {
+          applyRemoteSyncSnapshot(remote, true);
+        }
+      } catch {
+        // ignore transient sync fetch errors
+      }
+      return resolution;
+    }, [applyRemoteSyncSnapshot]);
+
+  const handleDisconnectClient = useCallback(() => {
+    clearMobileLinkSessionToken();
+    setActiveMobileLinkOrigin('');
+    setMobileLinkClientActive(false);
+    saveMobilePairingProfile(null);
+    setMobilePairingProfile(null);
+    setActiveSmartRoute(null);
+    setIsMobileLinkClient(false);
+  }, []);
+
+  const handleChangePocketAiMode = useCallback((mode: PocketAiMode) => {
+    setPocketLocalAiError(null);
+    setPocketAiState((prev) => {
+      savePocketAiConfig({ mode, loopbackPreset: prev.loopbackPreset });
+      return { ...prev, mode };
+    });
+  }, []);
+
+  const handleCancelPocketAiDownload = useCallback(() => {
+    if (pocketDownloadAbortRef.current) {
+      pocketDownloadAbortRef.current.abort();
+      pocketDownloadAbortRef.current = null;
+    }
+    setPocketDownloadingModelId(null);
+    setPocketDownloadProgress(null);
+  }, []);
+
+  const handleDownloadPocketAiModel = useCallback(
+    async (spec: PocketAiModelSpec) => {
+      if (pocketDownloadAbortRef.current) {
+        pocketDownloadAbortRef.current.abort();
+      }
+      const controller = new AbortController();
+      pocketDownloadAbortRef.current = controller;
+      setPocketLocalAiError(null);
+      setPocketDownloadingModelId(spec.id);
+      setPocketDownloadProgress({
+        receivedBytes: 0,
+        totalBytes: spec.downloadSizeMb * 1024 * 1024,
+        percent: 0,
+        verifiedHeader: false,
+      });
+
+      try {
+        const record = await downloadAndVerifyPocketAiModel(
+          spec,
+          (progress) => setPocketDownloadProgress(progress),
+          controller.signal
+        );
+        setInstalledPocketModels((prev) => {
+          const next = [record, ...prev.filter((item) => item.id !== record.id)];
+          void saveInstalledPocketAiModels(next);
+          return next;
+        });
+      } catch (err) {
+        if (!(err instanceof DOMException && err.name === 'AbortError')) {
+          setPocketLocalAiError(
+            err instanceof Error ? err.message : 'Model download failed.'
+          );
+        }
+      } finally {
+        if (pocketDownloadAbortRef.current === controller) {
+          pocketDownloadAbortRef.current = null;
+        }
+        setPocketDownloadingModelId(null);
+        setPocketDownloadProgress(null);
+      }
+    },
+    []
+  );
+
+  const handleImportPocketAiGguf = useCallback(async (file: File) => {
+    setPocketLocalAiError(null);
+    try {
+      const record = await verifyAndImportLocalGgufFile(file);
+      setInstalledPocketModels((prev) => {
+        const next = [record, ...prev.filter((item) => item.id !== record.id)];
+        void saveInstalledPocketAiModels(next);
+        return next;
+      });
+    } catch (err) {
+      setPocketLocalAiError(
+        err instanceof Error ? err.message : 'Invalid GGUF file.'
+      );
+    }
+  }, []);
+
+  const handleLoadPocketAiModel = useCallback(
+    async (model: PocketAiLocalModelRecord) => {
+      setPocketLocalAiError(null);
+      try {
+        const res = await loadNativePocketAiModel(model, settings.numCtx);
+        setPocketAiState((prev) => {
+          savePocketAiConfig({
+            mode: 'embedded-gguf',
+            loopbackPreset: prev.loopbackPreset,
+          });
+          return {
+            ...prev,
+            mode: 'embedded-gguf',
+            activeModelId: model.id,
+            activeModelName: model.name,
+            isModelLoaded: true,
+            estimatedActiveRamMb: res.estimatedRamMb,
+            lastAutoUnloadAt: null,
+          };
+        });
+        setErrorMessage(null);
+      } catch (err) {
+        setPocketLocalAiError(
+          err instanceof Error ? err.message : 'Failed to load model.'
+        );
+      }
+    },
+    [settings.numCtx]
+  );
+
+  const handleUnloadPocketAiModel = useCallback(async () => {
+    await unloadNativePocketAiModel();
+    setPocketAiState((prev) => ({
+      ...prev,
+      isModelLoaded: false,
+      activeModelId: null,
+      activeModelName: null,
+      estimatedActiveRamMb: 0,
+    }));
+  }, []);
+
+  const handleRemovePocketAiModel = useCallback((modelId: string) => {
+    setInstalledPocketModels((prev) => {
+      const next = prev.filter((item) => item.id !== modelId);
+      void saveInstalledPocketAiModels(next);
+      return next;
+    });
+    if (pocketAiStateRef.current.activeModelId === modelId) {
+      void unloadNativePocketAiModel();
+      setPocketAiState((prev) => ({
+        ...prev,
+        isModelLoaded: false,
+        activeModelId: null,
+        activeModelName: null,
+        estimatedActiveRamMb: 0,
+      }));
+    }
+  }, []);
+
+  const handleSelectPocketLoopback = useCallback(
+    (provider: ApiProvider, baseUrl: string, preset: PocketAiLoopbackPreset) => {
+      setPocketLocalAiError(null);
+      setPocketAiState((prev) => {
+        savePocketAiConfig({
+          mode: 'local-loopback',
+          loopbackPreset: preset,
+        });
+        return {
+          ...prev,
+          mode: 'local-loopback',
+          loopbackPreset: preset,
+        };
+      });
+      setSettings((prev) => ({
+        ...prev,
+        provider,
+        baseUrl,
+        ...(provider === 'openai' ? { openaiBaseUrl: baseUrl } : {}),
+      }));
+      void fetchProviderModels(provider, baseUrl, settings.apiKey)
+        .then((models) => {
+          setOllamaStatus('connected');
+          if (models.length > 0) {
+            setSettings((prev) => ({
+              ...prev,
+              availableModels: models,
+              selectedModel: prev.selectedModel || models[0].name,
+            }));
+          }
+        })
+        .catch(() => {
+          setOllamaStatus('offline');
+        });
+    },
+    [settings.apiKey]
+  );
+
+  const isCloudApiConfigured =
+    (settings.provider ?? 'ollama') === 'openai' &&
+    Boolean(settings.selectedModel.trim()) &&
+    (Boolean(settings.apiKey?.trim()) || isPublicHttpsApiUrl(settings.baseUrl));
+
+  const isMobileOfflineUnlinked =
+    isMobileClientRuntime && !isMobileLinkClient && !isCloudApiConfigured;
+
+  const canUseNativePocketAi =
+    isMobileClientRuntime &&
+    pocketAiState.mode === 'embedded-gguf' &&
+    pocketAiState.isModelLoaded &&
+    Boolean(pocketAiState.activeModelId) &&
+    Boolean(window.Capacitor?.Plugins?.AtriumLocalAi?.generateChat);
+
+  const showPocketAiOfflineCard =
+    isMobileOfflineUnlinked &&
+    ollamaStatus !== 'connected' &&
+    !pocketAiState.isModelLoaded;
+
   const streamAssistantReply = useCallback(
     async (targetCharacter: Character, baseHistory: ChatMessage[]) => {
       const activeProvider = settings.provider ?? 'ollama';
-      if (!settings.selectedModel.trim()) {
+      const activeModelLabel = canUseNativePocketAi
+        ? pocketAiState.activeModelName || pocketAiState.activeModelId || 'Pocket AI'
+        : settings.selectedModel;
+
+      if (!canUseNativePocketAi && !settings.selectedModel.trim()) {
         setErrorMessage(
           activeProvider === 'openai'
             ? t.selectOpenAIModelBeforeSending
@@ -1462,7 +1932,7 @@ export default function App() {
         swipes: [''],
         activeSwipeIndex: 0,
         createdAt: Date.now(),
-        model: settings.selectedModel,
+        model: activeModelLabel,
         isStreaming: true,
       };
 
@@ -1489,59 +1959,107 @@ export default function App() {
       abortControllerRef.current = controller;
       setStreamingCharacterId(targetCharacter.id);
 
-      try {
-        await streamProviderChat({
-          provider: activeProvider,
-          baseUrl: settings.baseUrl,
-          apiKey: settings.apiKey,
-          model: settings.selectedModel,
-          messages: ollamaMessages,
-          temperature: settings.temperature,
-          numPredict: settings.numPredict,
-          numCtx: settings.numCtx,
-          signal: controller.signal,
-          onToken: (token) => {
-            setConversations((prev) => {
-              const list = prev[targetCharacter.id] ?? [];
+      const appendTokenToAssistant = (token: string) => {
+        if (!token) return;
+        setConversations((prev) => {
+          const list = prev[targetCharacter.id] ?? [];
+          return {
+            ...prev,
+            [targetCharacter.id]: list.map((m) => {
+              if (m.id !== assistantMsgId) return m;
+              const nextContent = m.content + token;
+              const nextSwipes =
+                Array.isArray(m.swipes) && m.swipes.length > 0
+                  ? [...m.swipes]
+                  : [nextContent];
+              const idx = m.activeSwipeIndex ?? 0;
+              nextSwipes[idx] = nextContent;
               return {
-                ...prev,
-                [targetCharacter.id]: list.map((m) => {
-                  if (m.id !== assistantMsgId) return m;
-                  const nextContent = m.content + token;
-                  const nextSwipes =
-                    Array.isArray(m.swipes) && m.swipes.length > 0
-                      ? [...m.swipes]
-                      : [nextContent];
-                  const idx = m.activeSwipeIndex ?? 0;
-                  nextSwipes[idx] = nextContent;
-                  return {
-                    ...m,
-                    content: nextContent,
-                    swipes: nextSwipes,
-                  };
-                }),
+                ...m,
+                content: nextContent,
+                swipes: nextSwipes,
               };
+            }),
+          };
+        });
+      };
+
+      try {
+        const nativeAiPlugin = window.Capacitor?.Plugins?.AtriumLocalAi;
+        if (canUseNativePocketAi && nativeAiPlugin?.generateChat && pocketAiState.activeModelId) {
+          let streamedViaNativeEvents = false;
+          let tokenListenerHandle: { remove: () => Promise<void> | void } | undefined;
+          if (nativeAiPlugin.addListener) {
+            const maybeHandle = await nativeAiPlugin.addListener('token', (payload) => {
+              if (controller.signal.aborted) return;
+              const tok = typeof payload.token === 'string' ? payload.token : '';
+              if (tok) {
+                streamedViaNativeEvents = true;
+                appendTokenToAssistant(tok);
+              }
             });
-          },
-          onDone: (stats) => {
-            setOllamaStatus('connected');
+            tokenListenerHandle = maybeHandle;
+          }
+          try {
+            const result = await nativeAiPlugin.generateChat({
+              modelId: pocketAiState.activeModelId,
+              messages: ollamaMessages,
+              temperature: settings.temperature,
+              maxTokens: settings.numPredict,
+            });
+            if (controller.signal.aborted) {
+              throw new DOMException('Aborted', 'AbortError');
+            }
+            if (result?.error) {
+              throw new Error(result.error);
+            }
+            if (!streamedViaNativeEvents && typeof result?.text === 'string') {
+              appendTokenToAssistant(result.text);
+            }
             setConversations((prev) => {
               const list = prev[targetCharacter.id] ?? [];
               return {
                 ...prev,
                 [targetCharacter.id]: list.map((m) =>
-                  m.id === assistantMsgId
-                    ? {
-                        ...m,
-                        isStreaming: false,
-                        tokensPerSecond: stats?.tokensPerSecond,
-                      }
-                    : m
+                  m.id === assistantMsgId ? { ...m, isStreaming: false } : m
                 ),
               };
             });
-          },
-        });
+          } finally {
+            await tokenListenerHandle?.remove?.();
+          }
+        } else {
+          await streamProviderChat({
+            provider: activeProvider,
+            baseUrl: settings.baseUrl,
+            apiKey: settings.apiKey,
+            model: settings.selectedModel,
+            messages: ollamaMessages,
+            temperature: settings.temperature,
+            numPredict: settings.numPredict,
+            numCtx: settings.numCtx,
+            signal: controller.signal,
+            onToken: appendTokenToAssistant,
+            onDone: (stats) => {
+              setOllamaStatus('connected');
+              setConversations((prev) => {
+                const list = prev[targetCharacter.id] ?? [];
+                return {
+                  ...prev,
+                  [targetCharacter.id]: list.map((m) =>
+                    m.id === assistantMsgId
+                      ? {
+                          ...m,
+                          isStreaming: false,
+                          tokensPerSecond: stats?.tokensPerSecond,
+                        }
+                      : m
+                  ),
+                };
+              });
+            },
+          });
+        }
       } catch (err) {
         if (err instanceof DOMException && err.name === 'AbortError') {
           setConversations((prev) => {
@@ -1566,7 +2084,9 @@ export default function App() {
             message.toLowerCase().includes('connection failed')
           ) {
             setOllamaStatus('offline');
-            setShowOllamaSetupHelper(true);
+            if (!isMobileClientRuntime) {
+              setShowOllamaSetupHelper(true);
+            }
           }
           setConversations((prev) => {
             const list = prev[targetCharacter.id] ?? [];
@@ -1601,7 +2121,16 @@ export default function App() {
         });
       }
     },
-    [settings, storyMemories, userPersona, t]
+    [
+      canUseNativePocketAi,
+      isMobileClientRuntime,
+      pocketAiState.activeModelId,
+      pocketAiState.activeModelName,
+      settings,
+      storyMemories,
+      userPersona,
+      t,
+    ]
   );
 
   const handleSelectCharacter = useCallback(
@@ -1652,19 +2181,26 @@ export default function App() {
   const handleSendMessage = useCallback(
     async (content: string) => {
       const activeProvider = settings.provider ?? 'ollama';
-      if (activeProvider === 'ollama' && ollamaStatus === 'offline') {
-        setShowOllamaSetupHelper(true);
-        return;
-      }
+      if (!canUseNativePocketAi) {
+        if (activeProvider === 'ollama' && ollamaStatus === 'offline') {
+          if (isMobileOfflineUnlinked) {
+            setSettingsFocusSection('general');
+            setIsSettingsOpen(true);
+            return;
+          }
+          setShowOllamaSetupHelper(true);
+          return;
+        }
 
-      if (!settings.selectedModel.trim()) {
-        setErrorMessage(
-          activeProvider === 'openai'
-            ? t.selectOpenAIModelBeforeSending
-            : t.selectModelBeforeSending
-        );
-        setIsSettingsOpen(true);
-        return;
+        if (!settings.selectedModel.trim()) {
+          setErrorMessage(
+            activeProvider === 'openai'
+              ? t.selectOpenAIModelBeforeSending
+              : t.selectModelBeforeSending
+          );
+          setIsSettingsOpen(true);
+          return;
+        }
       }
 
       const priorHistory = conversations[activeCharacter.id] ?? [];
@@ -1692,7 +2228,9 @@ export default function App() {
     },
     [
       activeCharacter,
+      canUseNativePocketAi,
       conversations,
+      isMobileOfflineUnlinked,
       ollamaStatus,
       settings.provider,
       settings.selectedModel,
@@ -1704,19 +2242,26 @@ export default function App() {
 
   const handleRegenerateLastResponse = useCallback(async () => {
     const activeProvider = settings.provider ?? 'ollama';
-    if (activeProvider === 'ollama' && ollamaStatus === 'offline') {
-      setShowOllamaSetupHelper(true);
-      return;
-    }
+    if (!canUseNativePocketAi) {
+      if (activeProvider === 'ollama' && ollamaStatus === 'offline') {
+        if (isMobileOfflineUnlinked) {
+          setSettingsFocusSection('general');
+          setIsSettingsOpen(true);
+          return;
+        }
+        setShowOllamaSetupHelper(true);
+        return;
+      }
 
-    if (!settings.selectedModel.trim()) {
-      setErrorMessage(
-        activeProvider === 'openai'
-          ? t.selectOpenAIModelBeforeSending
-          : t.selectModelBeforeSending
-      );
-      setIsSettingsOpen(true);
-      return;
+      if (!settings.selectedModel.trim()) {
+        setErrorMessage(
+          activeProvider === 'openai'
+            ? t.selectOpenAIModelBeforeSending
+            : t.selectModelBeforeSending
+        );
+        setIsSettingsOpen(true);
+        return;
+      }
     }
 
     if (streamingCharacterId === activeCharacter.id) {
@@ -1769,6 +2314,10 @@ export default function App() {
       ...selectContextMessages(baseHistory, activeMemory, storyMemoryEnabled),
     ];
 
+    const activeModelLabel = canUseNativePocketAi
+      ? pocketAiState.activeModelName || pocketAiState.activeModelId || 'Pocket AI'
+      : settings.selectedModel;
+
     setConversations((prev) => {
       const list = prev[targetCharacter.id] ?? [];
       return {
@@ -1781,7 +2330,7 @@ export default function App() {
                 swipes: nextSwipes,
                 activeSwipeIndex: nextSwipeIndex,
                 createdAt: Date.now(),
-                model: settings.selectedModel,
+                model: activeModelLabel,
                 tokensPerSecond: undefined,
                 isStreaming: true,
                 isError: false,
@@ -1796,60 +2345,107 @@ export default function App() {
     setStreamingCharacterId(targetCharacter.id);
     let accumulated = '';
 
-    try {
-      await streamProviderChat({
-        provider: activeProvider,
-        baseUrl: settings.baseUrl,
-        apiKey: settings.apiKey,
-        model: settings.selectedModel,
-        messages: apiMessages,
-        temperature: settings.temperature,
-        numPredict: settings.numPredict,
-        numCtx: settings.numCtx,
-        signal: controller.signal,
-        onToken: (token) => {
-          accumulated += token;
-          const snapshot = accumulated;
-          setConversations((prev) => {
-            const list = prev[targetCharacter.id] ?? [];
+    const appendRegenToken = (token: string) => {
+      if (!token) return;
+      accumulated += token;
+      const snapshot = accumulated;
+      setConversations((prev) => {
+        const list = prev[targetCharacter.id] ?? [];
+        return {
+          ...prev,
+          [targetCharacter.id]: list.map((m) => {
+            if (m.id !== targetMsgId) return m;
+            const swipesCopy =
+              Array.isArray(m.swipes) && m.swipes.length > nextSwipeIndex
+                ? [...m.swipes]
+                : [...nextSwipes];
+            swipesCopy[nextSwipeIndex] = snapshot;
             return {
-              ...prev,
-              [targetCharacter.id]: list.map((m) => {
-                if (m.id !== targetMsgId) return m;
-                const swipesCopy =
-                  Array.isArray(m.swipes) && m.swipes.length > nextSwipeIndex
-                    ? [...m.swipes]
-                    : [...nextSwipes];
-                swipesCopy[nextSwipeIndex] = snapshot;
-                return {
-                  ...m,
-                  content: snapshot,
-                  swipes: swipesCopy,
-                  activeSwipeIndex: nextSwipeIndex,
-                };
-              }),
+              ...m,
+              content: snapshot,
+              swipes: swipesCopy,
+              activeSwipeIndex: nextSwipeIndex,
             };
+          }),
+        };
+      });
+    };
+
+    try {
+      const nativeAiPlugin = window.Capacitor?.Plugins?.AtriumLocalAi;
+      if (canUseNativePocketAi && nativeAiPlugin?.generateChat && pocketAiState.activeModelId) {
+        let streamedViaNativeEvents = false;
+        let tokenListenerHandle: { remove: () => Promise<void> | void } | undefined;
+        if (nativeAiPlugin.addListener) {
+          tokenListenerHandle = await nativeAiPlugin.addListener('token', (payload) => {
+            if (controller.signal.aborted) return;
+            const tok = typeof payload.token === 'string' ? payload.token : '';
+            if (tok) {
+              streamedViaNativeEvents = true;
+              appendRegenToken(tok);
+            }
           });
-        },
-        onDone: (stats) => {
-          setOllamaStatus('connected');
+        }
+        try {
+          const result = await nativeAiPlugin.generateChat({
+            modelId: pocketAiState.activeModelId,
+            messages: apiMessages,
+            temperature: settings.temperature,
+            maxTokens: settings.numPredict,
+          });
+          if (controller.signal.aborted) {
+            throw new DOMException('Aborted', 'AbortError');
+          }
+          if (result?.error) {
+            throw new Error(result.error);
+          }
+          if (!streamedViaNativeEvents && typeof result?.text === 'string') {
+            appendRegenToken(result.text);
+          }
           setConversations((prev) => {
             const list = prev[targetCharacter.id] ?? [];
             return {
               ...prev,
               [targetCharacter.id]: list.map((m) =>
-                m.id === targetMsgId
-                  ? {
-                      ...m,
-                      isStreaming: false,
-                      tokensPerSecond: stats?.tokensPerSecond,
-                    }
-                  : m
+                m.id === targetMsgId ? { ...m, isStreaming: false } : m
               ),
             };
           });
-        },
-      });
+        } finally {
+          await tokenListenerHandle?.remove?.();
+        }
+      } else {
+        await streamProviderChat({
+          provider: activeProvider,
+          baseUrl: settings.baseUrl,
+          apiKey: settings.apiKey,
+          model: settings.selectedModel,
+          messages: apiMessages,
+          temperature: settings.temperature,
+          numPredict: settings.numPredict,
+          numCtx: settings.numCtx,
+          signal: controller.signal,
+          onToken: appendRegenToken,
+          onDone: (stats) => {
+            setOllamaStatus('connected');
+            setConversations((prev) => {
+              const list = prev[targetCharacter.id] ?? [];
+              return {
+                ...prev,
+                [targetCharacter.id]: list.map((m) =>
+                  m.id === targetMsgId
+                    ? {
+                        ...m,
+                        isStreaming: false,
+                        tokensPerSecond: stats?.tokensPerSecond,
+                      }
+                    : m
+                ),
+              };
+            });
+          },
+        });
+      }
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') {
         setConversations((prev) => {
@@ -1893,7 +2489,9 @@ export default function App() {
           message.toLowerCase().includes('connection failed')
         ) {
           setOllamaStatus('offline');
-          setShowOllamaSetupHelper(true);
+          if (!isMobileClientRuntime) {
+            setShowOllamaSetupHelper(true);
+          }
         }
         setConversations((prev) => {
           const list = prev[targetCharacter.id] ?? [];
@@ -1957,8 +2555,13 @@ export default function App() {
     }
   }, [
     activeCharacter,
+    canUseNativePocketAi,
     conversations,
+    isMobileClientRuntime,
+    isMobileOfflineUnlinked,
     ollamaStatus,
+    pocketAiState.activeModelId,
+    pocketAiState.activeModelName,
     settings,
     stopStreaming,
     storyMemories,
@@ -1969,19 +2572,26 @@ export default function App() {
 
   const handleContinueLastResponse = useCallback(async () => {
     const activeProvider = settings.provider ?? 'ollama';
-    if (activeProvider === 'ollama' && ollamaStatus === 'offline') {
-      setShowOllamaSetupHelper(true);
-      return;
-    }
+    if (!canUseNativePocketAi) {
+      if (activeProvider === 'ollama' && ollamaStatus === 'offline') {
+        if (isMobileOfflineUnlinked) {
+          setSettingsFocusSection('general');
+          setIsSettingsOpen(true);
+          return;
+        }
+        setShowOllamaSetupHelper(true);
+        return;
+      }
 
-    if (!settings.selectedModel.trim()) {
-      setErrorMessage(
-        activeProvider === 'openai'
-          ? t.selectOpenAIModelBeforeSending
-          : t.selectModelBeforeSending
-      );
-      setIsSettingsOpen(true);
-      return;
+      if (!settings.selectedModel.trim()) {
+        setErrorMessage(
+          activeProvider === 'openai'
+            ? t.selectOpenAIModelBeforeSending
+            : t.selectModelBeforeSending
+        );
+        setIsSettingsOpen(true);
+        return;
+      }
     }
 
     if (streamingCharacterId === activeCharacter.id) {
@@ -2039,6 +2649,10 @@ export default function App() {
       },
     ];
 
+    const activeModelLabel = canUseNativePocketAi
+      ? pocketAiState.activeModelName || pocketAiState.activeModelId || 'Pocket AI'
+      : settings.selectedModel;
+
     setConversations((prev) => {
       const list = prev[targetCharacter.id] ?? [];
       return {
@@ -2049,7 +2663,7 @@ export default function App() {
                 ...m,
                 swipes: baseSwipes,
                 activeSwipeIndex: targetSwipeIndex,
-                model: settings.selectedModel,
+                model: activeModelLabel,
                 isStreaming: true,
               }
             : m
@@ -2062,70 +2676,116 @@ export default function App() {
     setStreamingCharacterId(targetCharacter.id);
     let appended = '';
 
-    try {
-      await streamProviderChat({
-        provider: activeProvider,
-        baseUrl: settings.baseUrl,
-        apiKey: settings.apiKey,
-        model: settings.selectedModel,
-        messages: apiMessages,
-        temperature: settings.temperature,
-        numPredict: settings.numPredict,
-        numCtx: settings.numCtx,
-        signal: controller.signal,
-        onToken: (token) => {
-          if (!token) return;
-          if (
-            appended.length === 0 &&
-            existingContent.length > 0 &&
-            !/\s$/.test(existingContent) &&
-            !/^[\s.,!?;:'"”’*)\]\-—…]/.test(token)
-          ) {
-            appended += ` ${token}`;
-          } else {
-            appended += token;
-          }
-          const combined = existingContent + appended;
-          setConversations((prev) => {
-            const list = prev[targetCharacter.id] ?? [];
+    const appendContinueToken = (token: string) => {
+      if (!token) return;
+      if (
+        appended.length === 0 &&
+        existingContent.length > 0 &&
+        !/\s$/.test(existingContent) &&
+        !/^[\s.,!?;:'"”’*)\]\-—…]/.test(token)
+      ) {
+        appended += ` ${token}`;
+      } else {
+        appended += token;
+      }
+      const combined = existingContent + appended;
+      setConversations((prev) => {
+        const list = prev[targetCharacter.id] ?? [];
+        return {
+          ...prev,
+          [targetCharacter.id]: list.map((m) => {
+            if (m.id !== targetMsgId) return m;
+            const swipesCopy =
+              Array.isArray(m.swipes) && m.swipes.length > targetSwipeIndex
+                ? [...m.swipes]
+                : [...baseSwipes];
+            swipesCopy[targetSwipeIndex] = combined;
             return {
-              ...prev,
-              [targetCharacter.id]: list.map((m) => {
-                if (m.id !== targetMsgId) return m;
-                const swipesCopy =
-                  Array.isArray(m.swipes) && m.swipes.length > targetSwipeIndex
-                    ? [...m.swipes]
-                    : [...baseSwipes];
-                swipesCopy[targetSwipeIndex] = combined;
-                return {
-                  ...m,
-                  content: combined,
-                  swipes: swipesCopy,
-                  activeSwipeIndex: targetSwipeIndex,
-                };
-              }),
+              ...m,
+              content: combined,
+              swipes: swipesCopy,
+              activeSwipeIndex: targetSwipeIndex,
             };
+          }),
+        };
+      });
+    };
+
+    try {
+      const nativeAiPlugin = window.Capacitor?.Plugins?.AtriumLocalAi;
+      if (canUseNativePocketAi && nativeAiPlugin?.generateChat && pocketAiState.activeModelId) {
+        let streamedViaNativeEvents = false;
+        let tokenListenerHandle: { remove: () => Promise<void> | void } | undefined;
+        if (nativeAiPlugin.addListener) {
+          tokenListenerHandle = await nativeAiPlugin.addListener('token', (payload) => {
+            if (controller.signal.aborted) return;
+            const tok = typeof payload.token === 'string' ? payload.token : '';
+            if (tok) {
+              streamedViaNativeEvents = true;
+              appendContinueToken(tok);
+            }
           });
-        },
-        onDone: (stats) => {
-          setOllamaStatus('connected');
+        }
+        try {
+          const result = await nativeAiPlugin.generateChat({
+            modelId: pocketAiState.activeModelId,
+            messages: apiMessages,
+            temperature: settings.temperature,
+            maxTokens: settings.numPredict,
+          });
+          if (controller.signal.aborted) {
+            throw new DOMException('Aborted', 'AbortError');
+          }
+          if (result?.error) {
+            throw new Error(result.error);
+          }
+          if (!streamedViaNativeEvents && typeof result?.text === 'string') {
+            appendContinueToken(result.text);
+          }
           setConversations((prev) => {
             const list = prev[targetCharacter.id] ?? [];
             return {
               ...prev,
               [targetCharacter.id]: list.map((m) =>
-                m.id === targetMsgId
-                  ? {
-                      ...m,
-                      isStreaming: false,
-                      tokensPerSecond: stats?.tokensPerSecond,
-                    }
-                  : m
+                m.id === targetMsgId ? { ...m, isStreaming: false } : m
               ),
             };
           });
-        },
-      });
+        } finally {
+          await tokenListenerHandle?.remove?.();
+        }
+      } else {
+        await streamProviderChat({
+          provider: activeProvider,
+          baseUrl: settings.baseUrl,
+          apiKey: settings.apiKey,
+          model: settings.selectedModel,
+          messages: apiMessages,
+          temperature: settings.temperature,
+          numPredict: settings.numPredict,
+          numCtx: settings.numCtx,
+          signal: controller.signal,
+          onToken: appendContinueToken,
+          onDone: (stats) => {
+            setOllamaStatus('connected');
+            setConversations((prev) => {
+              const list = prev[targetCharacter.id] ?? [];
+              return {
+                ...prev,
+                [targetCharacter.id]: list.map((m) =>
+                  m.id === targetMsgId
+                    ? {
+                        ...m,
+                        isStreaming: false,
+                        tokensPerSecond: stats?.tokensPerSecond,
+                      }
+                    : m
+                ),
+              };
+            });
+          },
+        });
+      }
     } catch (err) {
       if (!(err instanceof DOMException && err.name === 'AbortError')) {
         const message =
@@ -2136,7 +2796,9 @@ export default function App() {
           message.toLowerCase().includes('connection failed')
         ) {
           setOllamaStatus('offline');
-          setShowOllamaSetupHelper(true);
+          if (!isMobileClientRuntime) {
+            setShowOllamaSetupHelper(true);
+          }
         }
       }
     } finally {
@@ -2156,8 +2818,13 @@ export default function App() {
     }
   }, [
     activeCharacter,
+    canUseNativePocketAi,
     conversations,
+    isMobileClientRuntime,
+    isMobileOfflineUnlinked,
     ollamaStatus,
+    pocketAiState.activeModelId,
+    pocketAiState.activeModelName,
     settings,
     stopStreaming,
     storyMemories,
@@ -2413,19 +3080,26 @@ export default function App() {
   const handleEditUserMessage = useCallback(
     async (messageId: string, newContent: string) => {
       const activeProvider = settings.provider ?? 'ollama';
-      if (activeProvider === 'ollama' && ollamaStatus === 'offline') {
-        setShowOllamaSetupHelper(true);
-        return;
-      }
+      if (!canUseNativePocketAi) {
+        if (activeProvider === 'ollama' && ollamaStatus === 'offline') {
+          if (isMobileOfflineUnlinked) {
+            setSettingsFocusSection('general');
+            setIsSettingsOpen(true);
+            return;
+          }
+          setShowOllamaSetupHelper(true);
+          return;
+        }
 
-      if (!settings.selectedModel.trim()) {
-        setErrorMessage(
-          activeProvider === 'openai'
-            ? t.selectOpenAIModelBeforeSending
-            : t.selectModelBeforeSending
-        );
-        setIsSettingsOpen(true);
-        return;
+        if (!settings.selectedModel.trim()) {
+          setErrorMessage(
+            activeProvider === 'openai'
+              ? t.selectOpenAIModelBeforeSending
+              : t.selectModelBeforeSending
+          );
+          setIsSettingsOpen(true);
+          return;
+        }
       }
 
       if (streamingCharacterId === activeCharacter.id) {
@@ -2446,7 +3120,9 @@ export default function App() {
     },
     [
       activeCharacter,
+      canUseNativePocketAi,
       conversations,
+      isMobileOfflineUnlinked,
       ollamaStatus,
       settings.provider,
       settings.selectedModel,
@@ -2687,6 +3363,8 @@ export default function App() {
             >
               <AtriumLobby
                 t={t}
+                language={language}
+                onChangeLanguage={setLanguage}
                 characters={characters}
                 activeCharacterId={activeCharacter.id}
                 selectedModel={settings.selectedModel}
@@ -2720,10 +3398,21 @@ export default function App() {
                   setSettingsFocusSection('general');
                   setIsSettingsOpen(true);
                 }}
-                onOpenOllamaSetup={() => setShowOllamaSetupHelper(true)}
+                onOpenOllamaSetup={() => {
+                  if (isMobileOfflineUnlinked) {
+                    setSettingsFocusSection('general');
+                    setIsSettingsOpen(true);
+                    return;
+                  }
+                  setShowOllamaSetupHelper(true);
+                }}
                 mobileLinkActive={mobileLinkStatus.active}
+                isMobileClientConnected={isMobileLinkClient}
+                activeRouteType={activeSmartRoute}
                 onOpenMobileLink={
-                  isElectronHost && window.electronAPI?.startMobileLink
+                  (isElectronHost && window.electronAPI?.startMobileLink) ||
+                  isMobileClientRuntime ||
+                  isMobileLinkClient
                     ? () => setIsMobileLinkModalOpen(true)
                     : undefined
                 }
@@ -2780,6 +3469,18 @@ export default function App() {
                 storyMemory={storyMemories[activeCharacter.id]}
                 onOpenStoryMemory={() => setIsStoryMemoryOpen(true)}
                 onDismissError={() => setErrorMessage(null)}
+                showPocketAiOfflineCard={showPocketAiOfflineCard}
+                pocketAiState={pocketAiState}
+                activeRouteType={activeSmartRoute}
+                isMobileClientConnected={isMobileLinkClient}
+                onOpenPocketAiSetup={() => {
+                  setSettingsFocusSection('general');
+                  setIsSettingsOpen(true);
+                }}
+                onOpenMobileLinkPairing={() => setIsMobileLinkModalOpen(true)}
+                onUnloadPocketAiModel={() => {
+                  void handleUnloadPocketAiModel();
+                }}
               />
             </motion.div>
           )}
@@ -2818,6 +3519,21 @@ export default function App() {
           onExportBackup={handleExportBackup}
           onImportBackup={handleImportBackup}
           onReplayGrandIntro={handleReplayGrandIntro}
+          showPocketAi={isMobileClientRuntime}
+          pocketAiState={pocketAiState}
+          installedPocketModels={installedPocketModels}
+          pocketDownloadingModelId={pocketDownloadingModelId}
+          pocketDownloadProgress={pocketDownloadProgress}
+          pocketLocalAiError={pocketLocalAiError}
+          onDismissPocketAiError={() => setPocketLocalAiError(null)}
+          onChangePocketAiMode={handleChangePocketAiMode}
+          onDownloadPocketAiModel={handleDownloadPocketAiModel}
+          onCancelPocketAiDownload={handleCancelPocketAiDownload}
+          onImportPocketAiGguf={handleImportPocketAiGguf}
+          onLoadPocketAiModel={handleLoadPocketAiModel}
+          onUnloadPocketAiModel={handleUnloadPocketAiModel}
+          onRemovePocketAiModel={handleRemovePocketAiModel}
+          onSelectPocketLoopback={handleSelectPocketLoopback}
         />
 
         <StoryMemoryModal
@@ -2903,6 +3619,11 @@ export default function App() {
           language={language}
           status={mobileLinkStatus}
           onStatusChange={setMobileLinkStatus}
+          pairingProfile={mobilePairingProfile}
+          isClientConnected={isMobileLinkClient}
+          onPairClientSuccess={handlePairClientSuccess}
+          onReconnectDualRoute={handleReconnectDualRoute}
+          onDisconnectClient={handleDisconnectClient}
           onClose={() => setIsMobileLinkModalOpen(false)}
         />
 

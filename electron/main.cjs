@@ -733,6 +733,30 @@ function handleMobileLinkInfo(req, res) {
   });
 }
 
+const ALLOWED_MOBILE_LINK_CORS_ORIGINS = new Set([
+  'capacitor://localhost',
+  'http://localhost',
+  'https://localhost',
+]);
+
+function resolveAllowedMobileLinkCorsOrigin(req) {
+  const origin = req && req.headers ? req.headers.origin : undefined;
+  if (typeof origin !== 'string') return null;
+  const normalized = origin.trim().toLowerCase();
+  return ALLOWED_MOBILE_LINK_CORS_ORIGINS.has(normalized) ? origin.trim() : null;
+}
+
+function buildCorsHeadersForRequest(req) {
+  const allowedOrigin = resolveAllowedMobileLinkCorsOrigin(req);
+  if (!allowedOrigin) return {};
+  return {
+    'Access-Control-Allow-Origin': allowedOrigin,
+    'Access-Control-Allow-Headers': 'Content-Type, X-Atrium-Link-Token',
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    Vary: 'Origin',
+  };
+}
+
 function sendJsonResponse(res, statusCode, payload, extraHeaders = {}) {
   if (res.writableEnded) return;
   const body = JSON.stringify(payload);
@@ -1079,6 +1103,7 @@ function proxyToLocalService(req, res, targetPath, target) {
         responseHeaders['cache-control'] = 'no-cache, no-transform';
       }
       responseHeaders['x-accel-buffering'] = 'no';
+      Object.assign(responseHeaders, buildCorsHeadersForRequest(req));
 
       res.writeHead(proxyRes.statusCode || 502, responseHeaders);
       res.flushHeaders?.();
@@ -1319,6 +1344,33 @@ async function handleMobileLinkHttpRequest(req, res) {
   } catch {
     sendTextResponse(res, 400, 'Bad Request');
     return;
+  }
+
+  const corsHeaders = buildCorsHeadersForRequest(req);
+  if (req.method === 'OPTIONS') {
+    if (Object.keys(corsHeaders).length > 0) {
+      res.writeHead(204, {
+        ...corsHeaders,
+        'Access-Control-Max-Age': '600',
+      });
+      res.end();
+      return;
+    }
+    sendTextResponse(res, 403, 'Forbidden');
+    return;
+  }
+
+  const origSend = res.writeHead.bind(res);
+  if (Object.keys(corsHeaders).length > 0) {
+    res.writeHead = (statusCode, statusMessageOrHeaders, maybeHeaders) => {
+      if (typeof statusMessageOrHeaders === 'object' && statusMessageOrHeaders !== null) {
+        return origSend(statusCode, { ...statusMessageOrHeaders, ...corsHeaders });
+      }
+      if (typeof maybeHeaders === 'object' && maybeHeaders !== null) {
+        return origSend(statusCode, statusMessageOrHeaders, { ...maybeHeaders, ...corsHeaders });
+      }
+      return origSend(statusCode, statusMessageOrHeaders, corsHeaders);
+    };
   }
 
   const pathname = parsedUrl.pathname || '/';

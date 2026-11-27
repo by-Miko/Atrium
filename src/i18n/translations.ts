@@ -340,6 +340,51 @@ export interface UIStrings {
   mobileLinkRescanning: string;
   mobileLinkTailscaleOfflineCard: string;
   mobileLinkLanExternalHint: string;
+  quickLanguageToggleLabel: string;
+  mobileLinkClientTitle: string;
+  mobileLinkClientSubtitle: string;
+  mobileLinkScanQrButton: string;
+  mobileLinkScanningQr: string;
+  mobileLinkOrPasteUrl: string;
+  mobileLinkPairInputPlaceholder: string;
+  mobileLinkPairTokenLabel: string;
+  mobileLinkPairTokenPlaceholder: string;
+  mobileLinkConnectButton: string;
+  mobileLinkConnecting: string;
+  mobileLinkReconnectDualRoute: string;
+  mobileLinkDisconnectClient: string;
+  mobileLinkRouteLanBadge: string;
+  mobileLinkRouteVpnBadge: string;
+  mobileLinkDualRouteReady: string;
+  mobileLinkDualRouteHint: string;
+  mobileLinkScannerUnavailable: string;
+  mobileLinkCameraDenied: string;
+  mobileLinkSmartRouteLatency: (ms: number) => string;
+  pocketAiTitle: string;
+  pocketAiOfflineBadge: string;
+  pocketAiCardSubtitle: string;
+  pocketAiOpenSetupButton: string;
+  pocketAiLinkDesktopButton: string;
+  pocketAiModeEmbedded: string;
+  pocketAiModeLoopback: string;
+  pocketAiRamDetected: (gb: number, measured: boolean) => string;
+  pocketAiTierCompact: string;
+  pocketAiTierPerformance: string;
+  pocketAiRecommendedTag: string;
+  pocketAiDownloadButton: string;
+  pocketAiImportGgufButton: string;
+  pocketAiDownloading: (percent: number) => string;
+  pocketAiVerifiedBadge: string;
+  pocketAiLoadModel: string;
+  pocketAiLoadedActive: string;
+  pocketAiUnloadRamButton: (mb: number) => string;
+  pocketAiRamGuardHint: (sec: number) => string;
+  pocketAiAutoUnloadedNotice: string;
+  pocketAiNativeBridgeReady: string;
+  pocketAiNativeBridgeWebNote: string;
+  pocketAiLoopbackOllamaBtn: string;
+  pocketAiLoopbackLlamaBtn: string;
+  pocketAiLoopbackHint: string;
   themes: Record<ThemeId, { name: string; subtitle: string }>;
   bubbleSchemes: Record<BubbleSchemeId, { name: string; subtitle: string }>;
 }
@@ -662,7 +707,7 @@ export const TRANSLATIONS: Record<Language, UIStrings> = {
     outroSessionSaved: 'Session saved locally in Atrium',
     outroCraftedBy: 'Crafted by Miko',
     reopenAtrium: 'Reopen Atrium',
-    appVersion: 'v1.5.2 (Hardened)',
+    appVersion: 'v1.6.0 (Hardened)',
     settingsWatermark: 'Atrium Engine • Original Architecture by Miko',
     ollamaStatusChecking: 'Ollama...',
     ollamaStatusReady: 'Ollama Ready',
@@ -795,6 +840,62 @@ export const TRANSLATIONS: Record<Language, UIStrings> = {
       'No Mesh VPN tunnel is active on this PC. Turn on Tailscale, ZeroTier, NetBird, or WireGuard on your PC and phone to connect from any external network.',
     mobileLinkLanExternalHint:
       'External or public Wi-Fi routers often block device connections (AP Isolation / Windows Public Firewall). Use Mesh VPN away from home.',
+    quickLanguageToggleLabel: 'Switch language',
+    mobileLinkClientTitle: 'Connect to Desktop Atrium',
+    mobileLinkClientSubtitle:
+      'Scan the QR code on your Windows PC or enter its private LAN / Mesh VPN address to sync chats and stream PC Ollama models.',
+    mobileLinkScanQrButton: 'Scan Desktop QR',
+    mobileLinkScanningQr: 'Opening Camera...',
+    mobileLinkOrPasteUrl: 'Or paste pairing URL / enter IP manually',
+    mobileLinkPairInputPlaceholder: 'http://192.168.1.50:41730/?ml_token=...',
+    mobileLinkPairTokenLabel: 'Pairing Token (optional if included in URL)',
+    mobileLinkPairTokenPlaceholder: 'Paste 24-byte token if entering IP only',
+    mobileLinkConnectButton: 'Connect & Discover Dual-Route',
+    mobileLinkConnecting: 'Probing routes...',
+    mobileLinkReconnectDualRoute: 'Smart Reconnect (450ms Race)',
+    mobileLinkDisconnectClient: 'Disconnect Desktop',
+    mobileLinkRouteLanBadge: 'Direct LAN',
+    mobileLinkRouteVpnBadge: 'Encrypted Mesh VPN',
+    mobileLinkDualRouteReady: 'Smart Dual-Route Active',
+    mobileLinkDualRouteHint:
+      'Races Direct LAN vs Encrypted Mesh VPN in 450ms on reconnect. Cloud API keys remain isolated on PC.',
+    mobileLinkScannerUnavailable:
+      'Native camera QR scanner is available in the Android APK. Paste the Desktop QR URL or enter host IP & token below.',
+    mobileLinkCameraDenied:
+      'Camera permission denied. Allow camera access or paste the pairing URL manually.',
+    mobileLinkSmartRouteLatency: (ms) => `${ms}ms`,
+    pocketAiTitle: 'On-Device Pocket AI',
+    pocketAiOfflineBadge: 'Offline 1.5B–4B Mode',
+    pocketAiCardSubtitle:
+      'No Desktop Mobile Link or Cloud API active. Run a quantized GGUF model directly on this phone or pair your Windows PC.',
+    pocketAiOpenSetupButton: 'Configure Pocket AI',
+    pocketAiLinkDesktopButton: 'Pair Desktop PC',
+    pocketAiModeEmbedded: 'Embedded .gguf Engine',
+    pocketAiModeLoopback: 'Local Loopback (127.0.0.1)',
+    pocketAiRamDetected: (gb, measured) =>
+      measured ? `${gb} GB RAM detected` : `~${gb} GB RAM estimated`,
+    pocketAiTierCompact: 'Adaptive Tier: 1.5B–2B (4–6 GB RAM)',
+    pocketAiTierPerformance: 'Adaptive Tier: 3B–4B (8–12+ GB RAM)',
+    pocketAiRecommendedTag: 'Recommended',
+    pocketAiDownloadButton: 'Download .gguf',
+    pocketAiImportGgufButton: 'Import Local .gguf',
+    pocketAiDownloading: (percent) =>
+      `Downloading & verifying GGUF (${percent}%)...`,
+    pocketAiVerifiedBadge: 'GGUF Header Verified',
+    pocketAiLoadModel: 'Load Model',
+    pocketAiLoadedActive: 'Loaded in RAM',
+    pocketAiUnloadRamButton: (mb) => `Unload Model (Free ~${mb} MB RAM)`,
+    pocketAiRamGuardHint: (sec) =>
+      `Thermal & RAM Guard: auto-aborts and unloads ${sec}s after app goes to background.`,
+    pocketAiAutoUnloadedNotice:
+      'Model was automatically unloaded in background to protect battery and RAM.',
+    pocketAiNativeBridgeReady: 'Capacitor Native Runtime Ready',
+    pocketAiNativeBridgeWebNote:
+      'GGUF header verification & Hugging Face HTTPS downloads are active. Embedded inference runs inside the Android APK native plugin, or use Local Loopback below now.',
+    pocketAiLoopbackOllamaBtn: 'Connect Ollama (127.0.0.1:11434)',
+    pocketAiLoopbackLlamaBtn: 'Connect llama.cpp (127.0.0.1:8080)',
+    pocketAiLoopbackHint:
+      'Connect immediately to an Ollama (Termux) or llama.cpp OpenAI-compatible server running locally on this phone.',
   },
   es: {
     appTitle: 'Atrium',
@@ -1114,7 +1215,7 @@ export const TRANSLATIONS: Record<Language, UIStrings> = {
     outroSessionSaved: 'Sesión guardada localmente en Atrium',
     outroCraftedBy: 'Crafted by Miko',
     reopenAtrium: 'Reabrir Atrium',
-    appVersion: 'v1.5.2 (Hardened)',
+    appVersion: 'v1.6.0 (Hardened)',
     settingsWatermark: 'Atrium Engine • Original Architecture by Miko',
     ollamaStatusChecking: 'Ollama...',
     ollamaStatusReady: 'Ollama Listo',
@@ -1247,5 +1348,62 @@ export const TRANSLATIONS: Record<Language, UIStrings> = {
       'No hay ningún túnel Mesh VPN activo en esta PC. Enciende Tailscale, ZeroTier, NetBird o WireGuard en tu PC y en tu teléfono para conectar desde cualquier red externa.',
     mobileLinkLanExternalHint:
       'El Wi-Fi público o externo suele bloquear conexiones entre dispositivos (AP Isolation / Firewall). Usa Mesh VPN fuera de casa.',
+    quickLanguageToggleLabel: 'Cambiar idioma',
+    mobileLinkClientTitle: 'Conectar con Atrium PC',
+    mobileLinkClientSubtitle:
+      'Escanea el QR de tu PC Windows o ingresa su dirección privada LAN / Mesh VPN para sincronizar chats y usar Ollama de tu PC.',
+    mobileLinkScanQrButton: 'Escanear QR de PC',
+    mobileLinkScanningQr: 'Abriendo cámara...',
+    mobileLinkOrPasteUrl: 'O pega la URL de enlace / ingresa IP manual',
+    mobileLinkPairInputPlaceholder: 'http://192.168.1.50:41730/?ml_token=...',
+    mobileLinkPairTokenLabel: 'Token de enlace (opcional si viene en la URL)',
+    mobileLinkPairTokenPlaceholder: 'Pega el token de 24 bytes si ingresas solo la IP',
+    mobileLinkConnectButton: 'Conectar y Detectar Ruta Dual',
+    mobileLinkConnecting: 'Probando rutas...',
+    mobileLinkReconnectDualRoute: 'Reconexión Inteligente (450ms)',
+    mobileLinkDisconnectClient: 'Desconectar PC',
+    mobileLinkRouteLanBadge: 'LAN Directa',
+    mobileLinkRouteVpnBadge: 'VPN Mesh Cifrada',
+    mobileLinkDualRouteReady: 'Ruta Dual Inteligente Activa',
+    mobileLinkDualRouteHint:
+      'Compite LAN Directa vs VPN Mesh Cifrada en 450ms al reconectar. Las claves API permanecen aisladas en la PC.',
+    mobileLinkScannerUnavailable:
+      'El escáner nativo requiere el APK de Android. Pega la URL del QR de PC o ingresa la IP y el token abajo.',
+    mobileLinkCameraDenied:
+      'Permiso de cámara denegado. Habilita el acceso a la cámara o pega la URL manualmente.',
+    mobileLinkSmartRouteLatency: (ms) => `${ms}ms`,
+    pocketAiTitle: 'Pocket AI en el Dispositivo',
+    pocketAiOfflineBadge: 'Modo Offline 1.5B–4B',
+    pocketAiCardSubtitle:
+      'Sin conexión Mobile Link ni API Cloud activa. Ejecuta un modelo GGUF cuantizado directo en este teléfono o enlaza tu PC.',
+    pocketAiOpenSetupButton: 'Configurar Pocket AI',
+    pocketAiLinkDesktopButton: 'Enlazar PC',
+    pocketAiModeEmbedded: 'Motor .gguf Integrado',
+    pocketAiModeLoopback: 'Servidor Local (127.0.0.1)',
+    pocketAiRamDetected: (gb, measured) =>
+      measured ? `${gb} GB RAM detectada` : `~${gb} GB RAM estimada`,
+    pocketAiTierCompact: 'Nivel Adaptativo: 1.5B–2B (4–6 GB RAM)',
+    pocketAiTierPerformance: 'Nivel Adaptativo: 3B–4B (8–12+ GB RAM)',
+    pocketAiRecommendedTag: 'Recomendado',
+    pocketAiDownloadButton: 'Descargar .gguf',
+    pocketAiImportGgufButton: 'Importar .gguf Local',
+    pocketAiDownloading: (percent) =>
+      `Descargando y verificando GGUF (${percent}%)...`,
+    pocketAiVerifiedBadge: 'Cabecera GGUF Verificada',
+    pocketAiLoadModel: 'Cargar Modelo',
+    pocketAiLoadedActive: 'Cargado en RAM',
+    pocketAiUnloadRamButton: (mb) =>
+      `Descargar Modelo (Liberar ~${mb} MB RAM)`,
+    pocketAiRamGuardHint: (sec) =>
+      `Protección Térmica y RAM: detiene y descarga ${sec}s tras pasar a segundo plano.`,
+    pocketAiAutoUnloadedNotice:
+      'El modelo se descargó automáticamente en segundo plano para proteger batería y RAM.',
+    pocketAiNativeBridgeReady: 'Motor Nativo Capacitor Listo',
+    pocketAiNativeBridgeWebNote:
+      'La verificación GGUF y descargas HTTPS desde Hugging Face están activas. La inferencia integrada corre en el APK nativo Android, o usa Servidor Local abajo.',
+    pocketAiLoopbackOllamaBtn: 'Conectar Ollama (127.0.0.1:11434)',
+    pocketAiLoopbackLlamaBtn: 'Conectar llama.cpp (127.0.0.1:8080)',
+    pocketAiLoopbackHint:
+      'Conecta al instante con un servidor Ollama (Termux) o llama.cpp ejecutándose localmente en este teléfono.',
   },
 };

@@ -44,6 +44,7 @@ export const STORAGE_KEYS = {
 } as const;
 
 export const LOBBY_BACKDROP_MODE_STORAGE_KEY = 'atrium_lobby_backdrop_mode';
+export const LANGUAGE_LOCAL_STORAGE_KEY = 'atrium_language_v1';
 
 const IDB_NAME = 'atrium-db';
 const IDB_VERSION = 1;
@@ -336,6 +337,26 @@ export function saveLobbyBackdropMode(mode: LobbyBackdropMode): void {
   }
 }
 
+export function loadSavedLanguagePreference(): Language | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = window.localStorage.getItem(LANGUAGE_LOCAL_STORAGE_KEY);
+    if (raw === 'es' || raw === 'en') return raw;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveLanguagePreference(language: Language): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(LANGUAGE_LOCAL_STORAGE_KEY, language);
+  } catch {
+    // Ignore localStorage quota errors
+  }
+}
+
 export function hydrateVisualSettings(
   raw: Partial<VisualStudioSettings> | undefined
 ): VisualStudioSettings {
@@ -605,8 +626,11 @@ export async function loadAllPersistedState(): Promise<PersistedAppState> {
       ? savedBubble
       : 'indigo-violet';
 
+  const savedLocalLang = loadSavedLanguagePreference();
   const savedLang =
-    rawLang ?? readLegacyLocalStorage<Language>(STORAGE_KEYS.language);
+    savedLocalLang ??
+    rawLang ??
+    readLegacyLocalStorage<Language>(STORAGE_KEYS.language);
   const language: Language = savedLang === 'es' ? 'es' : 'en';
 
   const wallpaperFit: WallpaperFitMode =

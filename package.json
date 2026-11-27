@@ -18,7 +18,9 @@
     "lint": "tsc --noEmit"
   },
   "dependencies": {
+    "@capacitor-mlkit/barcode-scanning": "^8.2.2",
     "@capacitor/android": "^8.6.3",
+    "@capacitor/app": "^8.1.2",
     "@capacitor/cli": "^8.6.3",
     "@capacitor/core": "^8.6.3",
     "@tailwindcss/vite": "^4.3.3",

@@ -1,8 +1,11 @@
 import {
   AlertTriangle,
+  Camera,
   Check,
   Copy,
   Globe,
+  Link2Off,
+  Loader2,
   RefreshCw,
   ShieldCheck,
   Smartphone,
@@ -10,9 +13,26 @@ import {
   X,
 } from 'lucide-react';
 import QRCode from 'qrcode';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+} from 'react';
 import type { UIStrings } from '../i18n/translations';
-import type { Language, MobileLinkStatus } from '../types/chat';
+import type {
+  Language,
+  MobileLinkStatus,
+  MobilePairingProfile,
+} from '../types/chat';
+import {
+  pairWithMobileLinkDesktop,
+  scanNativeAndroidQrCode,
+  type SmartRouteResolution,
+} from '../utils/mobileSync';
+import { isElectronDesktop } from '../utils/platform';
 
 interface MobileLinkModalProps {
   t: UIStrings;
@@ -20,6 +40,11 @@ interface MobileLinkModalProps {
   language: Language;
   status: MobileLinkStatus;
   onStatusChange: (nextStatus: MobileLinkStatus) => void;
+  pairingProfile?: MobilePairingProfile | null;
+  isClientConnected?: boolean;
+  onPairClientSuccess?: (resolution: SmartRouteResolution) => void;
+  onReconnectDualRoute?: () => Promise<SmartRouteResolution | null>;
+  onDisconnectClient?: () => void;
   onClose: () => void;
 }
 
@@ -29,8 +54,14 @@ export function MobileLinkModal({
   language,
   status,
   onStatusChange,
+  pairingProfile = null,
+  isClientConnected = false,
+  onPairClientSuccess,
+  onReconnectDualRoute,
+  onDisconnectClient,
   onClose,
 }: MobileLinkModalProps) {
+  const isDesktopHost = isElectronDesktop();
   const [networkTab, setNetworkTab] = useState<'lan' | 'tailscale'>('lan');
   const [selectedUrlIndex, setSelectedUrlIndex] = useState(0);
   const [qrDataUrl, setQrDataUrl] = useState<string>('');
@@ -39,6 +70,14 @@ export function MobileLinkModal({
   const [rotateCount, setRotateCount] = useState(0);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [copiedUrl, setCopiedUrl] = useState(false);
+
+  // Android / Mobile Client pairing state
+  const [manualInput, setManualInput] = useState('');
+  const [manualToken, setManualToken] = useState('');
+  const [isScanningQr, setIsScanningQr] = useState(false);
+  const [isPairingClient, setIsPairingClient] = useState(false);
+  const [isReconnectingClient, setIsReconnectingClient] = useState(false);
+  const [clientErrorMsg, setClientErrorMsg] = useState<string | null>(null);
 
   const wasOpenRef = useRef(false);
   const userDisabledRef = useRef(false);
@@ -291,6 +330,80 @@ export function MobileLinkModal({
     }
   }, [activeUrl]);
 
+  const handleScanQr = useCallback(async () => {
+    setClientErrorMsg(null);
+    setIsScanningQr(true);
+    try {
+      const scannedUrl = await scanNativeAndroidQrCode();
+      setManualInput(scannedUrl);
+      setIsPairingClient(true);
+      const resolution = await pairWithMobileLinkDesktop(
+        scannedUrl,
+        manualToken || undefined
+      );
+      onPairClientSuccess?.(resolution);
+      onClose();
+    } catch (err) {
+      const code = err instanceof Error ? err.message : '';
+      if (code === 'QR_SCAN_CANCELLED') {
+        // User backed out of camera scanner cleanly
+      } else if (code === 'NATIVE_SCANNER_UNAVAILABLE') {
+        setClientErrorMsg(t.mobileLinkScannerUnavailable);
+      } else if (code === 'CAMERA_PERMISSION_DENIED') {
+        setClientErrorMsg(t.mobileLinkCameraDenied);
+      } else {
+        setClientErrorMsg(
+          err instanceof Error ? err.message : t.mobileLinkStartError
+        );
+      }
+    } finally {
+      setIsScanningQr(false);
+      setIsPairingClient(false);
+    }
+  }, [manualToken, onClose, onPairClientSuccess, t]);
+
+  const handleManualPairSubmit = useCallback(
+    async (e: FormEvent) => {
+      e.preventDefault();
+      if (!manualInput.trim()) return;
+      setClientErrorMsg(null);
+      setIsPairingClient(true);
+      try {
+        const resolution = await pairWithMobileLinkDesktop(
+          manualInput,
+          manualToken || undefined
+        );
+        onPairClientSuccess?.(resolution);
+        onClose();
+      } catch (err) {
+        setClientErrorMsg(
+          err instanceof Error ? err.message : t.mobileLinkStartError
+        );
+      } finally {
+        setIsPairingClient(false);
+      }
+    },
+    [manualInput, manualToken, onClose, onPairClientSuccess, t]
+  );
+
+  const handleReconnectClick = useCallback(async () => {
+    if (!onReconnectDualRoute) return;
+    setClientErrorMsg(null);
+    setIsReconnectingClient(true);
+    try {
+      const res = await onReconnectDualRoute();
+      if (!res) {
+        setClientErrorMsg(t.mobileLinkStartError);
+      }
+    } catch (err) {
+      setClientErrorMsg(
+        err instanceof Error ? err.message : t.mobileLinkStartError
+      );
+    } finally {
+      setIsReconnectingClient(false);
+    }
+  }, [onReconnectDualRoute, t.mobileLinkStartError]);
+
   const formattedLastSync = useMemo(() => {
     if (!status.lastSyncAt) {
       return t.mobileLinkNeverSynced;
@@ -320,7 +433,7 @@ export function MobileLinkModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-md"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 px-4 pt-[max(1rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur-md"
       role="dialog"
       aria-modal="true"
       aria-labelledby="mobile-link-modal-title"
@@ -350,10 +463,12 @@ export function MobileLinkModal({
                 id="mobile-link-modal-title"
                 className="font-display text-lg font-semibold text-white sm:text-xl"
               >
-                {t.mobileLinkTitle}
+                {isDesktopHost ? t.mobileLinkTitle : t.mobileLinkClientTitle}
               </h2>
               <p className="mt-0.5 text-xs leading-relaxed text-[var(--theme-muted)]">
-                {t.mobileLinkSubtitle}
+                {isDesktopHost
+                  ? t.mobileLinkSubtitle
+                  : t.mobileLinkClientSubtitle}
               </p>
             </div>
           </div>
@@ -366,19 +481,210 @@ export function MobileLinkModal({
               onClose();
             }}
             aria-label={t.dismiss}
-            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[var(--theme-muted)] transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-2 focus-visible:outline-[var(--theme-accent)]"
+            className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[var(--theme-muted)] transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-2 focus-visible:outline-[var(--theme-accent)] sm:h-9 sm:w-9"
           >
             <X className="h-4 w-4" />
           </button>
         </div>
 
         {/* Scrollable Body */}
-        <div className="flex-1 space-y-4 overflow-y-auto px-6 py-5">
-          {/* Server Toggle & Live Metrics (zero layout-shift single row) */}
-          <div className="flex items-center justify-between gap-3 rounded-2xl border border-white/12 bg-black/35 px-4 py-3">
-            <div className="flex min-w-0 flex-1 items-center gap-2.5">
-              <span
-                aria-hidden="true"
+        {!isDesktopHost ? (
+          <div className="flex-1 space-y-4 overflow-y-auto px-6 py-5">
+            {/* Active Smart Dual-Route Profile Card (if paired or saved) */}
+            {pairingProfile ? (
+              <div className="space-y-3 rounded-2xl border border-white/14 bg-black/35 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.12)]">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="font-display text-xs font-semibold text-white">
+                      {t.mobileLinkDualRouteReady}
+                    </span>
+                    {pairingProfile.activeRouteType ? (
+                      <span
+                        className={`inline-flex items-center gap-1 font-mono text-[11px] font-semibold ${
+                          pairingProfile.activeRouteType === 'vpn'
+                            ? 'text-cyan-300'
+                            : 'text-emerald-300'
+                        }`}
+                      >
+                        {pairingProfile.activeRouteType === 'vpn' ? (
+                          <Globe className="h-3.5 w-3.5" />
+                        ) : (
+                          <Wifi className="h-3.5 w-3.5" />
+                        )}
+                        <span>
+                          {pairingProfile.activeRouteType === 'vpn'
+                            ? t.mobileLinkRouteVpnBadge
+                            : t.mobileLinkRouteLanBadge}
+                        </span>
+                      </span>
+                    ) : null}
+                  </div>
+                  {typeof pairingProfile.lastLatencyMs === 'number' ? (
+                    <span className="font-mono text-[11px] tabular-nums text-white/65">
+                      {t.mobileLinkSmartRouteLatency(
+                        pairingProfile.lastLatencyMs
+                      )}
+                    </span>
+                  ) : null}
+                </div>
+
+                <div className="space-y-1.5 font-mono text-[11px] text-white/80">
+                  {pairingProfile.lanUrl ? (
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-white/50">LAN</span>
+                      <span className="truncate">{pairingProfile.lanUrl}</span>
+                    </div>
+                  ) : null}
+                  {pairingProfile.vpnUrl ? (
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-white/50">
+                        {pairingProfile.vpnProvider || 'Mesh VPN'}
+                      </span>
+                      <span className="truncate">{pairingProfile.vpnUrl}</span>
+                    </div>
+                  ) : null}
+                </div>
+
+                <p className="text-[11px] leading-relaxed text-[var(--theme-muted)]">
+                  {t.mobileLinkDualRouteHint}
+                </p>
+
+                <div className="flex flex-wrap gap-2 pt-1">
+                  {onReconnectDualRoute ? (
+                    <button
+                      type="button"
+                      disabled={isReconnectingClient}
+                      onClick={() => void handleReconnectClick()}
+                      className="inline-flex min-h-[44px] flex-1 items-center justify-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 text-xs font-semibold text-white transition-colors hover:bg-white/15 disabled:opacity-55"
+                    >
+                      <RefreshCw
+                        className={`h-3.5 w-3.5 text-[var(--theme-accent)] ${
+                          isReconnectingClient ? 'animate-spin' : ''
+                        }`}
+                      />
+                      <span>{t.mobileLinkReconnectDualRoute}</span>
+                    </button>
+                  ) : null}
+                  {isClientConnected && onDisconnectClient ? (
+                    <button
+                      type="button"
+                      onClick={onDisconnectClient}
+                      className="inline-flex min-h-[44px] items-center justify-center gap-1.5 rounded-full border border-rose-400/30 bg-rose-950/50 px-4 text-xs font-semibold text-rose-100 transition-colors hover:bg-rose-900/60"
+                    >
+                      <Link2Off className="h-3.5 w-3.5" />
+                      <span>{t.mobileLinkDisconnectClient}</span>
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
+
+            {/* Primary Native Android QR Scanner Action */}
+            <button
+              type="button"
+              disabled={isScanningQr || isPairingClient}
+              onClick={() => void handleScanQr()}
+              className="flex min-h-[48px] w-full items-center justify-center gap-2.5 rounded-2xl px-4 text-sm font-semibold shadow-lg transition-all hover:opacity-95 disabled:opacity-60"
+              style={{
+                backgroundColor: 'var(--theme-accent)',
+                color: 'var(--theme-on-accent)',
+              }}
+            >
+              {isScanningQr ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Camera className="h-4 w-4" />
+              )}
+              <span>
+                {isScanningQr
+                  ? t.mobileLinkScanningQr
+                  : t.mobileLinkScanQrButton}
+              </span>
+            </button>
+
+            {clientErrorMsg ? (
+              <div
+                role="alert"
+                className="rounded-2xl border border-rose-500/35 bg-rose-950/60 px-4 py-2.5 text-xs leading-relaxed text-rose-100"
+              >
+                {clientErrorMsg}
+              </div>
+            ) : null}
+
+            {/* Manual Pairing URL / Private IP + Token Form */}
+            <form
+              onSubmit={(e) => void handleManualPairSubmit(e)}
+              className="space-y-3 rounded-2xl border border-white/12 bg-black/35 p-4"
+            >
+              <div>
+                <label
+                  htmlFor="mobile-link-pair-url"
+                  className="mb-1.5 block text-xs font-medium text-white/85"
+                >
+                  {t.mobileLinkOrPasteUrl}
+                </label>
+                <input
+                  id="mobile-link-pair-url"
+                  type="text"
+                  value={manualInput}
+                  onChange={(e) => setManualInput(e.target.value)}
+                  placeholder={t.mobileLinkPairInputPlaceholder}
+                  autoComplete="off"
+                  spellCheck={false}
+                  className="h-11 w-full rounded-2xl border border-white/15 bg-black/45 px-3.5 font-mono text-xs text-white placeholder-white/35 focus:border-[var(--theme-accent)] focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label
+                  htmlFor="mobile-link-pair-token"
+                  className="mb-1.5 block text-xs font-medium text-white/85"
+                >
+                  {t.mobileLinkPairTokenLabel}
+                </label>
+                <input
+                  id="mobile-link-pair-token"
+                  type="password"
+                  value={manualToken}
+                  onChange={(e) => setManualToken(e.target.value)}
+                  placeholder={t.mobileLinkPairTokenPlaceholder}
+                  autoComplete="off"
+                  spellCheck={false}
+                  className="h-11 w-full rounded-2xl border border-white/15 bg-black/45 px-3.5 font-mono text-xs text-white placeholder-white/35 focus:border-[var(--theme-accent)] focus:outline-none"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={!manualInput.trim() || isPairingClient}
+                className="inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-2xl border border-white/15 bg-white/10 px-4 text-xs font-semibold text-white transition-colors hover:bg-white/15 disabled:opacity-45"
+              >
+                {isPairingClient ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Wifi className="h-4 w-4 text-[var(--theme-accent)]" />
+                )}
+                <span>
+                  {isPairingClient
+                    ? t.mobileLinkConnecting
+                    : t.mobileLinkConnectButton}
+                </span>
+              </button>
+            </form>
+
+            {/* Ephemeral Security Guarantee */}
+            <div className="flex items-start gap-2.5 rounded-2xl border border-emerald-400/20 bg-emerald-500/[0.08] px-3.5 py-2.5 text-[11px] leading-relaxed text-emerald-100/90">
+              <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-300" />
+              <span>{t.mobileLinkSecurityBadge}</span>
+            </div>
+          </div>
+        ) : (
+          <div className="flex-1 space-y-4 overflow-y-auto px-6 py-5">
+            {/* Server Toggle & Live Metrics (zero layout-shift single row) */}
+            <div className="flex items-center justify-between gap-3 rounded-2xl border border-white/12 bg-black/35 px-4 py-3">
+              <div className="flex min-w-0 flex-1 items-center gap-2.5">
+                <span
+                  aria-hidden="true"
                 className={`h-2.5 w-2.5 shrink-0 rounded-full ${
                   status.active
                     ? 'bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.9)]'
@@ -703,6 +1009,7 @@ export function MobileLinkModal({
             <span>{t.mobileLinkSecurityBadge}</span>
           </div>
         </div>
+        )}
       </div>
     </div>
   );

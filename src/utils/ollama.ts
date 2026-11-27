@@ -1,5 +1,8 @@
 import type { ApiProvider, OllamaModelTag } from '../types/chat';
-import { getMobileLinkSessionToken } from './mobileSync';
+import {
+  getActiveMobileLinkOrigin,
+  getMobileLinkSessionToken,
+} from './mobileSync';
 
 export const DEFAULT_OLLAMA_URL = 'http://localhost:11434';
 export const DEFAULT_OPENAI_URL = 'http://localhost:1234/v1';
@@ -259,21 +262,37 @@ function resolveOllamaEndpoint(
   endpointPath: '/api/tags' | '/api/chat'
 ): string {
   if (normalizedBaseUrl === '/api') {
-    return endpointPath;
+    const activeOrigin = getActiveMobileLinkOrigin();
+    return activeOrigin ? `${activeOrigin}${endpointPath}` : endpointPath;
   }
   return `${normalizedBaseUrl}${endpointPath}`;
 }
 
-function isRelativeOrSameOriginUrl(targetUrl: string): boolean {
+function resolveOpenAIEndpoint(
+  normalizedBaseUrl: string,
+  endpointPath: '/models' | '/chat/completions'
+): string {
+  if (normalizedBaseUrl === '/v1') {
+    const activeOrigin = getActiveMobileLinkOrigin();
+    return activeOrigin
+      ? `${activeOrigin}/v1${endpointPath}`
+      : `/v1${endpointPath}`;
+  }
+  return `${normalizedBaseUrl}${endpointPath}`;
+}
+
+function isMobileLinkRelayTarget(targetUrl: string): boolean {
   if (targetUrl.startsWith('/') && !targetUrl.startsWith('//')) {
     return true;
   }
   if (typeof window === 'undefined') return false;
   try {
-    return (
-      new URL(targetUrl, window.location.origin).origin ===
-      window.location.origin
-    );
+    const parsedOrigin = new URL(targetUrl, window.location.origin).origin;
+    if (parsedOrigin === window.location.origin) {
+      return true;
+    }
+    const activeOrigin = getActiveMobileLinkOrigin();
+    return Boolean(activeOrigin && parsedOrigin === activeOrigin);
   } catch {
     return false;
   }
@@ -286,12 +305,16 @@ function getMobileLinkRequestOptions(
   headers: Record<string, string>;
   credentials?: RequestCredentials;
 } {
-  if (!isRelativeOrSameOriginUrl(targetUrl)) {
+  if (!isMobileLinkRelayTarget(targetUrl)) {
     return { headers: baseHeaders };
   }
+  const activeOrigin = getActiveMobileLinkOrigin();
+  const isSameOrigin =
+    !activeOrigin ||
+    (typeof window !== 'undefined' && activeOrigin === window.location.origin);
   const token = getMobileLinkSessionToken();
   return {
-    credentials: 'same-origin',
+    ...(isSameOrigin ? { credentials: 'same-origin' as const } : {}),
     headers: token
       ? {
           ...baseHeaders,
@@ -417,7 +440,7 @@ export async function fetchOpenAICompatibleModels(
   signal?: AbortSignal
 ): Promise<OllamaModelTag[]> {
   const baseUrl = assertValidProviderUrl(rawUrl, DEFAULT_OPENAI_URL);
-  const endpoint = `${baseUrl}/models`;
+  const endpoint = resolveOpenAIEndpoint(baseUrl, '/models');
   const reqOpts = getMobileLinkRequestOptions(
     endpoint,
     buildOpenAIHeaders(baseUrl, apiKey, false)
@@ -693,7 +716,7 @@ export async function streamOpenAICompatibleChat({
   onDone,
 }: StreamChatParams): Promise<void> {
   const normalizedUrl = assertValidProviderUrl(baseUrl, DEFAULT_OPENAI_URL);
-  const endpoint = `${normalizedUrl}/chat/completions`;
+  const endpoint = resolveOpenAIEndpoint(normalizedUrl, '/chat/completions');
   const reqOpts = getMobileLinkRequestOptions(
     endpoint,
     buildOpenAIHeaders(normalizedUrl, apiKey, true)
