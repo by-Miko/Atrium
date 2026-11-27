@@ -53,6 +53,12 @@ Enforced simultaneously via `<meta>` (`index.html`) and HTTP response headers in
 - **Mandatory `<canvas>` Image Re-Encoding:** All imported images are decoded and re-encoded via HTML5 `<canvas>` (`readImageFileAsDataUrl`), neutralizing embedded `data:image/svg+xml`, `javascript:`, or CSS metadata payloads.
 - **Decompression Bomb Caps:** Strict size limits enforced on imports (`15 MB` max on TavernAI `.png` cards, `2 MB` max decompressed metadata, and `25 MB` max on `.json` backups).
 
+## 7. Android Native & On-Device Pocket AI Hardening (v1.6.0)
+
+* *App-Private .gguf Storage & Binary Magic Verification:* Curated .gguf models are downloaded strictly over HTTPS into app-private internal storage (filesDir/models/), sanitized against path traversal ([^a-zA-Z0-9._-]), and verified against the 4-byte GGUF binary magic header (0x47475546) before native C++/JNI memory mapping.
+* *Private-Subnet SSRF Guard & Scoped Cross-Origin Pairing:* Native Mobile Link endpoints strictly reject public/unencrypted external hosts (allowing only RFC1918 LAN and 100.64.0.0/10 CGNAT Mesh VPN interfaces) and authenticate via origin-scoped CORS (http://localhost / capacitor://localhost) with constant-time X-Atrium-Token validation.
+* *Signed Release Integrity:* Official Android builds (arm64-v8a) are signed with a private developer release keystore (CN=Miko, O=Atrium Project) stored in encrypted GitHub Actions Secrets.
+
 ---
 
 ## Reporting a Vulnerability / Reportar una Vulnerabilidad
@@ -104,6 +110,12 @@ Aplicada simultáneamente mediante `<meta>` (`index.html`) y cabeceras HTTP en `
 - **Sanitización Textual:** Todo texto renderizado (mensajes, nombres de personaje, roles e IDs de modelo) pasa por `sanitizeRenderedText()` para eliminar caracteres de control y secuencias *Bidi override*.
 - **Re-codificación Obligatoria de Imágenes vía `<canvas>`:** Todas las imágenes importadas se decodifican y re-codifican mediante HTML5 `<canvas>` (`readImageFileAsDataUrl`), neutralizando cargas útiles `data:image/svg+xml`, `javascript:` o inyecciones CSS en metadatos.
 - **Límites Anti-Bombas de Descompresión:** Límites estrictos de tamaño en importaciones (`15 MB` máx. en tarjetas `.png` TavernAI, `2 MB` máx. en metadatos descomprimidos y `25 MB` máx. en respaldos `.json`).
+
+## 7. Endurecimiento Nativo en Android e IA Local de Bolsillo (v1.6.0)
+
+* *Almacenamiento Privado .gguf y Verificación de Cabecera Binaria:* Los modelos .gguf se descargan exclusivamente por HTTPS dentro del almacenamiento privado interno de la aplicación (filesDir/models/), sanitizando nombres de archivo contra path traversal y verificando la cabecera mágica binaria GGUF de 4 bytes (0x47475546) antes de cargarlos en memoria nativa C++/JNI.
+* *Guardia Anti-SSRF de Subredes Privadas y Vinculación Cross-Origin Acotada:* Los endpoints nativos de Mobile Link rechazan hosts públicos sin cifrar (permitiendo únicamente redes locales RFC1918 y subredes CGNAT 100.64.0.0/10 de Mesh VPN) y autentican mediante CORS acotado al origen nativo (http://localhost / capacitor://localhost) con validación en tiempo constante de X-Atrium-Token.
+* *Integridad de Lanzamiento Firmado:* Las compilaciones oficiales para Android (arm64-v8a) se firman con un certificado privado de desarrollador (CN=Miko, O=Atrium Project) resguardado mediante secretos cifrados en GitHub Actions.
 
 ---
 
