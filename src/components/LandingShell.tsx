@@ -2,6 +2,7 @@ import {
   ArrowDown,
   ArrowRight,
   ArrowUpRight,
+  ChevronDown,
   Cpu,
   Download,
   Monitor,
@@ -79,6 +80,7 @@ interface LandingCopy {
     identityBody: string;
     primaryCta: string;
     secondaryCta: string;
+    androidCta: string;
     metrics: readonly [HeroMetricItem, HeroMetricItem, HeroMetricItem];
     scrollCue: string;
   };
@@ -150,6 +152,8 @@ interface LandingCopy {
   evolution: {
     eyebrow: string;
     title: string;
+    expandAllLabel: string;
+    collapseOlderLabel: string;
     milestones: readonly EvolutionMilestone[];
   };
   creator: {
@@ -166,6 +170,7 @@ interface LandingCopy {
     primaryButton: string;
     setupDownload: string;
     portableDownload: string;
+    androidDownload: string;
   };
   downloadModal: {
     eyebrowPrefix: string;
@@ -237,32 +242,33 @@ const LANDING_COPY: Record<LandingLang, LandingCopy> = {
       github: 'GitHub',
     },
     hero: {
-      statusPill: 'ATRIUM LATEST EDITION • LOCAL-FIRST STUDIO',
-      statusPillMobile: 'ATRIUM LATEST • LOCAL-FIRST',
+      statusPill: 'ATRIUM V1.6.0 • WINDOWS DESKTOP + ANDROID 120HZ',
+      statusPillMobile: 'ATRIUM V1.6.0 • WIN + ANDROID',
       headlinePrimary: 'Your Private AI Roleplay Studio.',
       headlineAccent: 'Crafted in Optical Liquid Glass.',
       identityBody:
-        'Bring characters to life on your Windows PC and pair your phone instantly via QR. 100% private, zero subscriptions, powered by Ollama, LM Studio, or your own API keys.',
+        'Run characters locally on Windows Desktop or native 120Hz Android with embedded llama.cpp pocket AI (.gguf). Pair devices in one QR scan over LAN or Mesh VPN—100% private, zero subscriptions, Ollama, LM Studio, or your own API keys.',
       primaryCta: 'Try Live Web Demo',
-      secondaryCta: 'Download Latest for Windows',
+      secondaryCta: 'Download Windows v1.6.0',
+      androidCta: 'Download Android v1.6.0 (.apk)',
       metrics: [
         {
           title: '100% Local-First',
-          subtitle: 'Ollama, LM Studio & APIs',
+          subtitle: 'Ollama, LM Studio & Embedded llama.cpp',
         },
         {
-          title: 'PC ↔ QR Mobile',
-          subtitle: 'LAN & Tailscale Sync',
+          title: 'Windows + Android 120Hz',
+          subtitle: 'Electron Sandbox & Native arm64 Pocket AI',
         },
         {
-          title: 'Latest Edition',
-          subtitle: 'DPAPI & Sandboxed',
+          title: 'QR Dual-Route Sync',
+          subtitle: '450ms LAN & Mesh VPN Handoff',
         },
       ],
       scrollCue: 'Scroll to see how Atrium works in 3 steps',
     },
     emblemStage: {
-      studioLabel: 'ATRIUM STUDIO • LATEST',
+      studioLabel: 'ATRIUM STUDIO • V1.6.0',
       actionHint: 'Launch Live Demo →',
     },
     howItWorks: {
@@ -373,18 +379,21 @@ const LANDING_COPY: Record<LandingLang, LandingCopy> = {
     evolution: {
       eyebrow: 'EVOLUTION // ROADMAP & RELEASES',
       title: 'Built in the Open by Miko.',
+      expandAllLabel: 'Expand all',
+      collapseOlderLabel: 'Collapse older releases',
       milestones: [
         {
-          version: 'v1.4.1',
-          tag: 'Security Baseline',
-          title: 'v1.4.1 Hardened Edition',
-          body: 'Sandboxed Electron 35 runtime, Windows DPAPI credential encryption, @electron/fuses binary sealing, and double-layer Content Security Policy.',
+          version: 'v1.6.0',
+          tag: 'Current',
+          isCurrent: true,
+          title: 'v1.6.0 Native Android & Embedded Pocket AI (Current)',
+          body: 'Capacitor 8 native Android (arm64-v8a) at 120Hz, -O3 compiled llama.cpp C++/JNI offline .gguf pocket inference with Adaptive Memory Tiering, Google MLKit QR pairing with 450ms LAN/Mesh VPN Dual-Route handoff, and real-device field verification on POCO X7 Pro & Vivo Y22.',
         },
         {
-          version: 'v1.5.0',
-          tag: 'Cross-Device Sync',
-          title: 'v1.5.0 Mobile UI & QR Link',
-          body: 'Full < 640px mobile interface redesign, instant PC-to-Mobile QR pairing over Wi-Fi LAN or Tailscale VPN, and real-time bidirectional IndexedDB sync.',
+          version: 'v1.5.2',
+          tag: 'Card Ecosystem',
+          title: 'v1.5.2 TavernAI Card Ecosystem & Ambient Glass',
+          body: 'Full TavernAI V2/V3 .png card import/export with <canvas> sanitization, FLIP-animated spatial lobby transitions, and adaptive portrait ambient glass.',
         },
         {
           version: 'v1.5.1',
@@ -393,11 +402,16 @@ const LANDING_COPY: Record<LandingLang, LandingCopy> = {
           body: 'ZeroTier, WireGuard, and Tailscale multi-mesh CIDR detection, strict loopback and private-network enforcement, and the official Optical Liquid Glass web showcase.',
         },
         {
-          version: 'v1.5.2',
-          tag: 'Current',
-          isCurrent: true,
-          title: 'v1.5.2 TavernAI Card Ecosystem & Ambient Glass (Current)',
-          body: 'Full TavernAI V2/V3 .png card import/export with <canvas> sanitization, FLIP-animated spatial lobby transitions, and adaptive portrait ambient glass.',
+          version: 'v1.5.0',
+          tag: 'Cross-Device Sync',
+          title: 'v1.5.0 Mobile UI & QR Link',
+          body: 'Full < 640px mobile interface redesign, instant PC-to-Mobile QR pairing over Wi-Fi LAN or Tailscale VPN, and real-time bidirectional IndexedDB sync.',
+        },
+        {
+          version: 'v1.4.1',
+          tag: 'Security Baseline',
+          title: 'v1.4.1 Hardened Edition',
+          body: 'Sandboxed Electron 35 runtime, Windows DPAPI credential encryption, @electron/fuses binary sealing, and double-layer Content Security Policy.',
         },
       ],
     },
@@ -413,10 +427,11 @@ const LANDING_COPY: Record<LandingLang, LandingCopy> = {
       eyebrow: 'WEB SANDBOX // DIRECT ENTRY',
       title: 'Experience Atrium Anywhere.',
       subtitle:
-        'Launch the interactive browser studio immediately, or install the hardened Windows desktop build for local Electron sandboxing and Mobile Link QR sync.',
+        'Launch the interactive browser studio immediately, install the hardened Windows v1.6.0 build, or side-load the native 120Hz Android (.apk) with embedded llama.cpp pocket AI.',
       primaryButton: 'Enter Atrium Studio →',
       setupDownload: 'Windows Installer (.exe)',
       portableDownload: 'Portable (.exe)',
+      androidDownload: 'Android v1.6.0 (.apk)',
     },
     downloadModal: {
       eyebrowPrefix: 'OPEN-SOURCE TRANSPARENCY',
@@ -440,7 +455,7 @@ const LANDING_COPY: Record<LandingLang, LandingCopy> = {
     },
     footer: {
       copyright: '© 2026 Miko (by-Miko)',
-      license: 'MIT Open Source • Latest Hardened Edition',
+      license: 'MIT Open Source • V1.6.0 Desktop + Android',
       skipIntro: 'Skip',
       secretAriaLabel: 'Open hidden Atrium chronicle',
     },
@@ -502,32 +517,33 @@ const LANDING_COPY: Record<LandingLang, LandingCopy> = {
       github: 'GitHub',
     },
     hero: {
-      statusPill: 'ATRIUM ÚLTIMA EDICIÓN • LOCAL-FIRST STUDIO',
-      statusPillMobile: 'ATRIUM LATEST • LOCAL-FIRST',
+      statusPill: 'ATRIUM V1.6.0 • WINDOWS DESKTOP + ANDROID 120HZ',
+      statusPillMobile: 'ATRIUM V1.6.0 • WIN + ANDROID',
       headlinePrimary: 'Tu Estudio Privado de Roleplay con IA.',
       headlineAccent: 'Diseñado en Optical Liquid Glass.',
       identityBody:
-        'Da vida a personajes inmersivos en tu PC Windows y vincula tu celular al instante por QR. 100% privado, sin suscripciones, compatible con Ollama, LM Studio o tus propias APIs.',
+        'Ejecuta personajes en Windows Desktop o Android nativo a 120Hz con IA de bolsillo llama.cpp (.gguf) integrada. Vincula dispositivos con un escaneo QR por LAN o VPN Mesh—100% privado, sin suscripciones, Ollama, LM Studio o tus propias APIs.',
       primaryCta: 'Probar Demo en Vivo',
-      secondaryCta: 'Descargar Windows (Última Versión)',
+      secondaryCta: 'Descargar Windows v1.6.0',
+      androidCta: 'Descargar Android v1.6.0 (.apk)',
       metrics: [
         {
           title: '100% Local-First',
-          subtitle: 'Ollama, LM Studio y APIs',
+          subtitle: 'Ollama, LM Studio y llama.cpp Integrado',
         },
         {
-          title: 'PC ↔ QR Móvil',
-          subtitle: 'Sync LAN y Tailscale',
+          title: 'Windows + Android 120Hz',
+          subtitle: 'Sandbox Desktop e IA arm64 de Bolsillo',
         },
         {
-          title: 'Última Edición',
-          subtitle: 'DPAPI y Sandbox',
+          title: 'Sync QR Dual-Route',
+          subtitle: 'Relevo LAN y VPN Mesh en 450ms',
         },
       ],
       scrollCue: 'Desliza para ver cómo funciona Atrium en 3 pasos',
     },
     emblemStage: {
-      studioLabel: 'ATRIUM STUDIO • LATEST',
+      studioLabel: 'ATRIUM STUDIO • V1.6.0',
       actionHint: 'Abrir Demo en Vivo →',
     },
     howItWorks: {
@@ -638,18 +654,21 @@ const LANDING_COPY: Record<LandingLang, LandingCopy> = {
     evolution: {
       eyebrow: 'EVOLUCIÓN // HITOS Y VERSIONES',
       title: 'Construido en Abierto por Miko.',
+      expandAllLabel: 'Expandir todas',
+      collapseOlderLabel: 'Contraer versiones anteriores',
       milestones: [
         {
-          version: 'v1.4.1',
-          tag: 'Base de Seguridad',
-          title: 'v1.4.1 Edición Endurecida',
-          body: 'Entorno Electron 35 aislado en sandbox, cifrado de credenciales con Windows DPAPI, sellado binario con @electron/fuses y Content Security Policy de doble capa.',
+          version: 'v1.6.0',
+          tag: 'Actual',
+          isCurrent: true,
+          title: 'v1.6.0 Android Nativo e IA de Bolsillo Integrada (Actual)',
+          body: 'Android nativo (arm64-v8a) en Capacitor 8 a 120Hz, motor C++/JNI llama.cpp compilado con -O3 para inferencia .gguf offline con Adaptive Memory Tiering, escáner QR Google MLKit con relevo Dual-Route LAN/VPN Mesh en 450ms y verificación real en POCO X7 Pro y Vivo Y22.',
         },
         {
-          version: 'v1.5.0',
-          tag: 'Sync Multi-Dispositivo',
-          title: 'v1.5.0 Interfaz Móvil y QR Link',
-          body: 'Rediseño completo para móviles < 640px, emparejamiento QR instantáneo PC-a-Móvil por Wi-Fi LAN o Tailscale VPN y sincronización bidireccional IndexedDB en tiempo real.',
+          version: 'v1.5.2',
+          tag: 'Ecosistema de Tarjetas',
+          title: 'v1.5.2 Ecosistema TavernAI y Cristal Ambiental',
+          body: 'Importación y exportación de tarjetas TavernAI V2/V3 .png con sanitización <canvas>, transiciones FLIP en el lobby espacial y cristal ambiental adaptable a retratos.',
         },
         {
           version: 'v1.5.1',
@@ -658,11 +677,16 @@ const LANDING_COPY: Record<LandingLang, LandingCopy> = {
           body: 'Detección CIDR multi-mesh para ZeroTier, WireGuard y Tailscale, validación estricta de red local/loopback y portal web oficial en Optical Liquid Glass.',
         },
         {
-          version: 'v1.5.2',
-          tag: 'Actual',
-          isCurrent: true,
-          title: 'v1.5.2 Ecosistema TavernAI y Cristal Ambiental (Actual)',
-          body: 'Importación y exportación de tarjetas TavernAI V2/V3 .png con sanitización <canvas>, transiciones FLIP en el lobby espacial y cristal ambiental adaptable a retratos.',
+          version: 'v1.5.0',
+          tag: 'Sync Multi-Dispositivo',
+          title: 'v1.5.0 Interfaz Móvil y QR Link',
+          body: 'Rediseño completo para móviles < 640px, emparejamiento QR instantáneo PC-a-Móvil por Wi-Fi LAN o Tailscale VPN y sincronización bidireccional IndexedDB en tiempo real.',
+        },
+        {
+          version: 'v1.4.1',
+          tag: 'Base de Seguridad',
+          title: 'v1.4.1 Edición Endurecida',
+          body: 'Entorno Electron 35 aislado en sandbox, cifrado de credenciales con Windows DPAPI, sellado binario con @electron/fuses y Content Security Policy de doble capa.',
         },
       ],
     },
@@ -678,10 +702,11 @@ const LANDING_COPY: Record<LandingLang, LandingCopy> = {
       eyebrow: 'SANDBOX WEB // ACCESO DIRECTO',
       title: 'Prueba Atrium Donde Quieras.',
       subtitle:
-        'Abre el estudio interactivo en tu navegador al instante o descarga la compilación endurecida para Windows con sandbox Electron y sincronización QR Mobile Link.',
+        'Abre el estudio interactivo en tu navegador al instante, instala la compilación endurecida para Windows v1.6.0 o descarga Android nativo (.apk) a 120Hz con IA llama.cpp de bolsillo.',
       primaryButton: 'Entrar a Atrium Studio →',
       setupDownload: 'Instalador Windows (.exe)',
       portableDownload: 'Portable (.exe)',
+      androidDownload: 'Android v1.6.0 (.apk)',
     },
     downloadModal: {
       eyebrowPrefix: 'TRANSPARENCIA OPEN-SOURCE',
@@ -705,7 +730,7 @@ const LANDING_COPY: Record<LandingLang, LandingCopy> = {
     },
     footer: {
       copyright: '© 2026 Miko (by-Miko)',
-      license: 'MIT Open Source • Última Edición Endurecida',
+      license: 'MIT Open Source • V1.6.0 Desktop + Android',
       skipIntro: 'Saltar',
       secretAriaLabel: 'Abrir crónica oculta de Atrium',
     },
@@ -803,9 +828,24 @@ const BOOT_DUST_MOTES = [
 
 const GITHUB_LATEST_RELEASE_API =
   'https://api.github.com/repos/by-Miko/Atrium/releases/latest';
-const RELEASE_CACHE_KEY = 'atrium_latest_release_tag_v1';
+const RELEASE_CACHE_KEY = 'atrium_latest_release_info_v2';
 const RELEASE_CACHE_TTL_MS = 15 * 60 * 1000;
-const SEMVER_TAG_PATTERN = /^v?\d+\.\d+\.\d+(?:[-+.\w]*)?$/i;
+const DEFAULT_RELEASE_TAG = 'v1.6.0';
+const SEMVER_TAG_PATTERN = /^v?(\d+)\.(\d+)\.(\d+)(?:[-+.\w]*)?$/i;
+
+interface LatestReleaseInfo {
+  tag: string;
+  windowsSetupUrl: string;
+  windowsPortableUrl: string;
+  androidApkUrl: string;
+}
+
+const DEFAULT_RELEASE_INFO: LatestReleaseInfo = {
+  tag: DEFAULT_RELEASE_TAG,
+  windowsSetupUrl: GITHUB_RELEASES_URL,
+  windowsPortableUrl: GITHUB_RELEASES_URL,
+  androidApkUrl: GITHUB_RELEASES_URL,
+};
 
 function normalizeReleaseTag(rawTag: unknown): string | null {
   if (typeof rawTag !== 'string') return null;
@@ -816,43 +856,130 @@ function normalizeReleaseTag(rawTag: unknown): string | null {
     : `v${trimmed}`;
 }
 
-function readCachedReleaseTag(): string | null {
+function isTagAtLeast(tag: string, minMajor: number, minMinor: number, minPatch: number): boolean {
+  const match = SEMVER_TAG_PATTERN.exec(tag);
+  if (!match) return false;
+  const major = Number(match[1]);
+  const minor = Number(match[2]);
+  const patch = Number(match[3]);
+  if (major !== minMajor) return major > minMajor;
+  if (minor !== minMinor) return minor > minMinor;
+  return patch >= minPatch;
+}
+
+function sanitizeGitHubDownloadUrl(rawUrl: unknown): string | null {
+  if (typeof rawUrl !== 'string') return null;
+  try {
+    const parsed = new URL(rawUrl);
+    if (
+      parsed.protocol === 'https:' &&
+      (parsed.hostname === 'github.com' ||
+        parsed.hostname === 'objects.githubusercontent.com' ||
+        parsed.hostname.endsWith('.githubusercontent.com'))
+    ) {
+      return parsed.toString();
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function extractReleaseAssets(rawAssets: unknown): {
+  windowsSetupUrl: string;
+  windowsPortableUrl: string;
+  androidApkUrl: string;
+} {
+  if (!Array.isArray(rawAssets)) {
+    return {
+      windowsSetupUrl: GITHUB_RELEASES_URL,
+      windowsPortableUrl: GITHUB_RELEASES_URL,
+      androidApkUrl: GITHUB_RELEASES_URL,
+    };
+  }
+
+  let firstExe: string | null = null;
+  let setupExe: string | null = null;
+  let portableExe: string | null = null;
+  let androidApk: string | null = null;
+
+  for (const asset of rawAssets) {
+    if (!asset || typeof asset !== 'object') continue;
+    const record = asset as { name?: unknown; browser_download_url?: unknown };
+    const name = typeof record.name === 'string' ? record.name.toLowerCase() : '';
+    const url = sanitizeGitHubDownloadUrl(record.browser_download_url);
+    if (!name || !url) continue;
+
+    if (name.endsWith('.exe')) {
+      if (!firstExe) firstExe = url;
+      if (name.includes('portable') && !portableExe) {
+        portableExe = url;
+      } else if ((name.includes('setup') || name.includes('installer')) && !setupExe) {
+        setupExe = url;
+      }
+    } else if (name.endsWith('.apk') && !androidApk) {
+      androidApk = url;
+    }
+  }
+
+  return {
+    windowsSetupUrl: setupExe ?? firstExe ?? GITHUB_RELEASES_URL,
+    windowsPortableUrl: portableExe ?? firstExe ?? GITHUB_RELEASES_URL,
+    androidApkUrl: androidApk ?? GITHUB_RELEASES_URL,
+  };
+}
+
+function readCachedReleaseInfo(): LatestReleaseInfo | null {
   try {
     const raw = window.sessionStorage.getItem(RELEASE_CACHE_KEY);
     if (!raw) return null;
-    const parsed = JSON.parse(raw) as { tag?: unknown; cachedAt?: unknown };
+    const parsed = JSON.parse(raw) as Partial<LatestReleaseInfo> & {
+      cachedAt?: unknown;
+    };
     if (
       typeof parsed?.cachedAt !== 'number' ||
       Date.now() - parsed.cachedAt > RELEASE_CACHE_TTL_MS
     ) {
       return null;
     }
-    return normalizeReleaseTag(parsed.tag);
+    const tag = normalizeReleaseTag(parsed.tag);
+    if (!tag || !isTagAtLeast(tag, 1, 6, 0)) return null;
+
+    return {
+      tag,
+      windowsSetupUrl:
+        sanitizeGitHubDownloadUrl(parsed.windowsSetupUrl) ?? GITHUB_RELEASES_URL,
+      windowsPortableUrl:
+        sanitizeGitHubDownloadUrl(parsed.windowsPortableUrl) ??
+        GITHUB_RELEASES_URL,
+      androidApkUrl:
+        sanitizeGitHubDownloadUrl(parsed.androidApkUrl) ?? GITHUB_RELEASES_URL,
+    };
   } catch {
     return null;
   }
 }
 
-function writeCachedReleaseTag(tag: string): void {
+function writeCachedReleaseInfo(info: LatestReleaseInfo): void {
   try {
     window.sessionStorage.setItem(
       RELEASE_CACHE_KEY,
-      JSON.stringify({ tag, cachedAt: Date.now() })
+      JSON.stringify({ ...info, cachedAt: Date.now() })
     );
   } catch {
     // Ignore sessionStorage restrictions in private browsing modes.
   }
 }
 
-function useLatestAtriumRelease(): string | null {
-  const [latestTag, setLatestTag] = useState<string | null>(() =>
-    readCachedReleaseTag()
+function useLatestAtriumRelease(): LatestReleaseInfo {
+  const [releaseInfo, setReleaseInfo] = useState<LatestReleaseInfo>(
+    () => readCachedReleaseInfo() ?? DEFAULT_RELEASE_INFO
   );
 
   useEffect(() => {
-    const cached = readCachedReleaseTag();
+    const cached = readCachedReleaseInfo();
     if (cached) {
-      setLatestTag(cached);
+      setReleaseInfo(cached);
       return;
     }
 
@@ -865,17 +992,22 @@ function useLatestAtriumRelease(): string | null {
     })
       .then((res) => {
         if (!res.ok) return null;
-        return res.json() as Promise<{ tag_name?: unknown }>;
+        return res.json() as Promise<{ tag_name?: unknown; assets?: unknown }>;
       })
       .then((data) => {
         if (!data) return;
         const normalized = normalizeReleaseTag(data.tag_name);
-        if (!normalized) return;
-        writeCachedReleaseTag(normalized);
-        setLatestTag(normalized);
+        if (!normalized || !isTagAtLeast(normalized, 1, 6, 0)) return;
+        const assets = extractReleaseAssets(data.assets);
+        const nextInfo: LatestReleaseInfo = {
+          tag: normalized,
+          ...assets,
+        };
+        writeCachedReleaseInfo(nextInfo);
+        setReleaseInfo(nextInfo);
       })
       .catch(() => {
-        // Fallback cleanly to evergreen release labels when offline or rate-limited.
+        // Fallback cleanly to v1.6.0 release labels and GitHub Releases page when offline or rate-limited.
       });
 
     return () => {
@@ -883,16 +1015,14 @@ function useLatestAtriumRelease(): string | null {
     };
   }, []);
 
-  return latestTag;
+  return releaseInfo;
 }
 
 function applyReleaseVersionToCopy(
   baseCopy: LandingCopy,
   lang: LandingLang,
-  latestTag: string | null
+  latestTag: string
 ): LandingCopy {
-  if (!latestTag) return baseCopy;
-
   const upperTag = latestTag.toUpperCase();
 
   if (lang === 'es') {
@@ -900,17 +1030,10 @@ function applyReleaseVersionToCopy(
       ...baseCopy,
       hero: {
         ...baseCopy.hero,
-        statusPill: `ATRIUM ${upperTag} HARDENED • LOCAL-FIRST STUDIO`,
-        statusPillMobile: `ATRIUM ${upperTag} • LOCAL-FIRST`,
+        statusPill: `ATRIUM ${upperTag} • WINDOWS DESKTOP + ANDROID 120HZ`,
+        statusPillMobile: `ATRIUM ${upperTag} • WIN + ANDROID`,
         secondaryCta: `Descargar Windows ${latestTag}`,
-        metrics: [
-          baseCopy.hero.metrics[0],
-          baseCopy.hero.metrics[1],
-          {
-            ...baseCopy.hero.metrics[2],
-            title: `${latestTag} Endurecida`,
-          },
-        ],
+        androidCta: `Descargar Android ${latestTag} (.apk)`,
       },
       emblemStage: {
         ...baseCopy.emblemStage,
@@ -919,7 +1042,7 @@ function applyReleaseVersionToCopy(
       showcase: {
         ...baseCopy.showcase,
         fallbackBadge: `ATRIUM ${upperTag} // REEL INTERACTIVO`,
-        fallbackDescription: `Entra ahora mismo a la demo interactiva en tu navegador o consulta el video y código fuente de Windows ${latestTag} en GitHub.`,
+        fallbackDescription: `Entra ahora mismo a la demo interactiva en tu navegador o consulta el video y código fuente de ${latestTag} en GitHub.`,
       },
       architecture: {
         ...baseCopy.architecture,
@@ -931,11 +1054,12 @@ function applyReleaseVersionToCopy(
       },
       launch: {
         ...baseCopy.launch,
-        subtitle: `Abre el estudio interactivo en tu navegador al instante o descarga la compilación endurecida para Windows ${latestTag} con sandbox Electron y sincronización QR Mobile Link.`,
+        subtitle: `Abre el estudio interactivo en tu navegador al instante, instala la compilación endurecida para Windows ${latestTag} o descarga Android nativo (.apk) a 120Hz con IA llama.cpp de bolsillo.`,
+        androidDownload: `Android ${latestTag} (.apk)`,
       },
       footer: {
         ...baseCopy.footer,
-        license: `MIT Open Source • ${upperTag} Endurecida`,
+        license: `MIT Open Source • ${upperTag} Desktop + Android`,
       },
     };
   }
@@ -944,17 +1068,10 @@ function applyReleaseVersionToCopy(
     ...baseCopy,
     hero: {
       ...baseCopy.hero,
-      statusPill: `ATRIUM ${upperTag} HARDENED • LOCAL-FIRST STUDIO`,
-      statusPillMobile: `ATRIUM ${upperTag} • LOCAL-FIRST`,
+      statusPill: `ATRIUM ${upperTag} • WINDOWS DESKTOP + ANDROID 120HZ`,
+      statusPillMobile: `ATRIUM ${upperTag} • WIN + ANDROID`,
       secondaryCta: `Download Windows ${latestTag}`,
-      metrics: [
-        baseCopy.hero.metrics[0],
-        baseCopy.hero.metrics[1],
-        {
-          ...baseCopy.hero.metrics[2],
-          title: `${latestTag} Hardened`,
-        },
-      ],
+      androidCta: `Download Android ${latestTag} (.apk)`,
     },
     emblemStage: {
       ...baseCopy.emblemStage,
@@ -963,7 +1080,7 @@ function applyReleaseVersionToCopy(
     showcase: {
       ...baseCopy.showcase,
       fallbackBadge: `ATRIUM ${upperTag} // INTERACTIVE REEL`,
-      fallbackDescription: `Step inside the browser demo right now or watch the full ${latestTag} release reel and Windows desktop source on GitHub.`,
+      fallbackDescription: `Step inside the browser demo right now or watch the full ${latestTag} release reel and source code on GitHub.`,
     },
     architecture: {
       ...baseCopy.architecture,
@@ -975,11 +1092,12 @@ function applyReleaseVersionToCopy(
     },
     launch: {
       ...baseCopy.launch,
-      subtitle: `Launch the interactive browser studio immediately, or install the hardened Windows ${latestTag} desktop build for local Electron sandboxing and Mobile Link QR sync.`,
+      subtitle: `Launch the interactive browser studio immediately, install the hardened Windows ${latestTag} build, or side-load the native 120Hz Android (.apk) with embedded llama.cpp pocket AI.`,
+      androidDownload: `Android ${latestTag} (.apk)`,
     },
     footer: {
       ...baseCopy.footer,
-      license: `MIT Open Source • ${upperTag} Hardened`,
+      license: `MIT Open Source • ${upperTag} Desktop + Android`,
     },
   };
 }
@@ -1831,12 +1949,35 @@ export function LandingShell({
     () => !prefersReducedMotion()
   );
   const [entered, setEntered] = useState<boolean>(() => prefersReducedMotion());
-  const latestReleaseTag = useLatestAtriumRelease();
+  const latestRelease = useLatestAtriumRelease();
+  const [expandedMilestones, setExpandedMilestones] = useState<string[]>(() => [
+    'v1.6.0',
+  ]);
   const copy = useMemo(
     () =>
-      applyReleaseVersionToCopy(LANDING_COPY[lang], lang, latestReleaseTag),
-    [lang, latestReleaseTag]
+      applyReleaseVersionToCopy(LANDING_COPY[lang], lang, latestRelease.tag),
+    [lang, latestRelease.tag]
   );
+
+  const toggleMilestone = useCallback((version: string) => {
+    setExpandedMilestones((prev) =>
+      prev.includes(version)
+        ? prev.filter((item) => item !== version)
+        : [...prev, version]
+    );
+  }, []);
+
+  const allMilestonesExpanded = copy.evolution.milestones.every((milestone) =>
+    expandedMilestones.includes(milestone.version)
+  );
+
+  const toggleExpandAllMilestones = useCallback(() => {
+    setExpandedMilestones((prev) => {
+      const allVersions = copy.evolution.milestones.map((m) => m.version);
+      const everyOpen = allVersions.every((v) => prev.includes(v));
+      return everyOpen ? ['v1.6.0'] : allVersions;
+    });
+  }, [copy.evolution.milestones]);
 
   const handleBrandSecretClick = useCallback(
     (event: React.MouseEvent<HTMLAnchorElement>) => {
@@ -2182,8 +2323,8 @@ export function LandingShell({
                   {copy.hero.identityBody}
                 </p>
 
-                {/* Immediate Dual CTA Row — Full-width thumb-friendly on mobile */}
-                <div className="flex flex-col gap-3.5 pt-8 sm:flex-row sm:items-center">
+                {/* Immediate Multi-Platform CTA Row — Web Demo + Windows (.exe) & Android (.apk) */}
+                <div className="flex flex-wrap items-center gap-3 pt-8">
                   <button
                     type="button"
                     onClick={onEnterApp}
@@ -2193,22 +2334,37 @@ export function LandingShell({
                     <ArrowRight className="h-4 w-4 shrink-0" aria-hidden="true" />
                   </button>
 
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setPendingDownloadTarget({
-                        label: copy.hero.secondaryCta,
-                        url: GITHUB_RELEASES_URL,
-                      })
-                    }
-                    className={`inline-flex min-h-[48px] w-full cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-full px-6 py-3 text-sm font-medium transition duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#a78bfa] sm:w-auto ${SECONDARY_GLASS_BUTTON}`}
-                  >
-                    <Download
-                      className="h-4 w-4 shrink-0 text-[#e5cca0]"
-                      aria-hidden="true"
-                    />
-                    <span>{copy.hero.secondaryCta}</span>
-                  </button>
+                  <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-center">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setPendingDownloadTarget({
+                          label: copy.hero.secondaryCta,
+                          url: latestRelease.windowsSetupUrl,
+                        })
+                      }
+                      className={`inline-flex min-h-[48px] w-full cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-full px-5 py-3 text-sm font-medium transition duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#a78bfa] sm:w-auto ${SECONDARY_GLASS_BUTTON}`}
+                    >
+                      <Download
+                        className="h-4 w-4 shrink-0 text-[#e5cca0]"
+                        aria-hidden="true"
+                      />
+                      <span>{copy.hero.secondaryCta}</span>
+                    </button>
+
+                    <a
+                      href={latestRelease.androidApkUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className={`inline-flex min-h-[48px] w-full cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-full px-5 py-3 text-sm font-medium transition duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#a78bfa] sm:w-auto ${SECONDARY_GLASS_BUTTON}`}
+                    >
+                      <Smartphone
+                        className="h-4 w-4 shrink-0 text-[#c4b5fd]"
+                        aria-hidden="true"
+                      />
+                      <span>{copy.hero.androidCta}</span>
+                    </a>
+                  </div>
                 </div>
                 {/* Refined 3-Column Quick-Impact Metric Strip */}
                 <div className="mt-8 grid grid-cols-1 gap-4 border-t border-white/10 pt-6 sm:grid-cols-3 sm:gap-0 sm:divide-x sm:divide-white/10">
@@ -2850,82 +3006,143 @@ export function LandingShell({
           </div>
         </section>
 
-        {/* 4.5 #evolution — Vertical Architectural Evolution Timeline */}
+        {/* 4.5 #evolution — Vertical Collapsible Changelog Timeline */}
         <section
           id="evolution"
           className="mx-auto max-w-6xl scroll-mt-16 border-t border-white/10 px-6 py-14 sm:py-20"
         >
-          <div className="mb-10 max-w-2xl">
-            <p className="font-mono text-[11px] tracking-[0.18em] text-[#a78bfa]">
-              {copy.evolution.eyebrow}
-            </p>
-            <h2 className="font-display mt-3 text-balance text-3xl font-semibold tracking-tight text-white sm:text-5xl">
-              {copy.evolution.title}
-            </h2>
+          <div className="mb-10 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+            <div className="max-w-2xl">
+              <p className="font-mono text-[11px] tracking-[0.18em] text-[#a78bfa]">
+                {copy.evolution.eyebrow}
+              </p>
+              <h2 className="font-display mt-3 text-balance text-3xl font-semibold tracking-tight text-white sm:text-5xl">
+                {copy.evolution.title}
+              </h2>
+            </div>
+
+            <button
+              type="button"
+              onClick={toggleExpandAllMilestones}
+              aria-pressed={allMilestonesExpanded}
+              className={`inline-flex min-h-[38px] shrink-0 cursor-pointer items-center justify-center gap-1.5 self-start whitespace-nowrap rounded-full px-4 py-1.5 font-mono text-[11px] tracking-wider transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#a78bfa] sm:self-auto ${SECONDARY_GLASS_BUTTON}`}
+            >
+              <span>
+                {allMilestonesExpanded
+                  ? copy.evolution.collapseOlderLabel
+                  : copy.evolution.expandAllLabel}
+              </span>
+              <ChevronDown
+                className={`h-3.5 w-3.5 text-[#e5cca0] transition-transform duration-300 ${
+                  allMilestonesExpanded ? 'rotate-180' : 'rotate-0'
+                }`}
+                aria-hidden="true"
+              />
+            </button>
           </div>
 
           <div className="relative pl-8 sm:pl-10">
             {/* Vertical Illuminated Hairline */}
             <div
               aria-hidden="true"
-              className="pointer-events-none absolute top-2 bottom-2 left-[11px] w-[2px] bg-gradient-to-b from-violet-500/70 via-[#e5cca0]/60 to-transparent sm:left-[15px]"
+              className="pointer-events-none absolute top-2 bottom-2 left-[11px] w-[2px] bg-gradient-to-b from-[#e5cca0]/75 via-violet-500/60 to-transparent sm:left-[15px]"
             />
 
-            <div className="space-y-6">
-              {copy.evolution.milestones.map((milestone) => (
-                <article key={milestone.version} className="relative">
-                  {/* Glowing Milestone Node */}
-                  <div
-                    aria-hidden="true"
-                    className={`absolute top-6 -left-8 flex h-6 w-6 items-center justify-center rounded-full border sm:-left-10 sm:h-8 sm:w-8 ${
-                      milestone.isCurrent
-                        ? 'border-[#e5cca0]/70 bg-[#12101d] shadow-[0_0_22px_rgba(229,204,160,0.42)]'
-                        : 'border-violet-400/50 bg-[#0b0b12] shadow-[0_0_18px_rgba(139,92,246,0.35)]'
-                    }`}
-                  >
-                    <span
-                      className={`h-2.5 w-2.5 rounded-full ${
-                        milestone.isCurrent ? 'bg-[#e5cca0]' : 'bg-[#a78bfa]'
-                      }`}
-                    />
-                  </div>
+            <div className="space-y-4">
+              {copy.evolution.milestones.map((milestone) => {
+                const isExpanded = expandedMilestones.includes(milestone.version);
+                const panelId = `changelog-panel-${milestone.version.replace(/[^a-zA-Z0-9_-]/g, '')}`;
 
-                  <div
-                    className={`relative overflow-hidden rounded-[24px] p-5 sm:p-7 ${SMOKED_GLASS_SURFACE}`}
-                  >
+                return (
+                  <article key={milestone.version} className="relative">
+                    {/* Glowing Milestone Node */}
                     <div
                       aria-hidden="true"
-                      className={`pointer-events-none absolute inset-x-8 top-0 h-[1px] bg-gradient-to-r ${
+                      className={`absolute top-5 -left-8 flex h-6 w-6 items-center justify-center rounded-full border sm:top-6 sm:-left-10 sm:h-8 sm:w-8 ${
                         milestone.isCurrent
-                          ? 'from-transparent via-[#e5cca0]/65 to-[#a78bfa]/45'
-                          : 'from-transparent via-[#a78bfa]/55 to-transparent'
+                          ? 'border-[#e5cca0]/70 bg-[#12101d] shadow-[0_0_22px_rgba(229,204,160,0.42)]'
+                          : 'border-violet-400/50 bg-[#0b0b12] shadow-[0_0_18px_rgba(139,92,246,0.35)]'
                       }`}
-                    />
-
-                    <div className="relative z-10 flex flex-wrap items-center gap-2.5">
+                    >
                       <span
-                        className={`inline-flex items-center rounded-full border px-2.5 py-0.5 font-mono text-[10px] font-semibold tracking-[0.14em] ${
-                          milestone.isCurrent
-                            ? 'border-[#e5cca0]/45 bg-[#e5cca0]/10 text-[#e5cca0]'
-                            : 'border-violet-400/30 bg-violet-500/10 text-[#c4b5fd]'
+                        className={`h-2.5 w-2.5 rounded-full ${
+                          milestone.isCurrent ? 'bg-[#e5cca0]' : 'bg-[#a78bfa]'
                         }`}
-                      >
-                        {milestone.version}
-                      </span>
-                      <span className="font-mono text-[10px] tracking-[0.12em] text-zinc-400">
-                        {milestone.tag}
-                      </span>
+                      />
                     </div>
 
-                    <h3 className="font-display relative z-10 mt-3 text-lg font-semibold tracking-tight text-white sm:text-xl">
-                      {milestone.title}
-                    </h3>
-                    <p className="relative z-10 mt-2 text-sm leading-relaxed text-[#a1a1aa]">
-                      {milestone.body}
-                    </p>
-                  </div>
-                </article>
-              ))}
+                    <div
+                      className={`relative overflow-hidden rounded-[24px] transition-colors duration-200 hover:border-violet-400/35 hover:bg-white/[0.055] ${SMOKED_GLASS_SURFACE}`}
+                    >
+                      <div
+                        aria-hidden="true"
+                        className={`pointer-events-none absolute inset-x-8 top-0 h-[1px] bg-gradient-to-r ${
+                          milestone.isCurrent
+                            ? 'from-transparent via-[#e5cca0]/65 to-[#a78bfa]/45'
+                            : 'from-transparent via-[#a78bfa]/55 to-transparent'
+                        }`}
+                      />
+
+                      <button
+                        type="button"
+                        onClick={() => toggleMilestone(milestone.version)}
+                        aria-expanded={isExpanded}
+                        aria-controls={panelId}
+                        className="group relative z-10 flex w-full cursor-pointer items-start justify-between gap-4 p-5 text-left focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[#a78bfa] sm:p-6"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2.5">
+                            <span
+                              className={`inline-flex items-center rounded-full border px-2.5 py-0.5 font-mono text-[10px] font-semibold tracking-[0.14em] ${
+                                milestone.isCurrent
+                                  ? 'border-[#e5cca0]/45 bg-[#e5cca0]/10 text-[#e5cca0]'
+                                  : 'border-violet-400/30 bg-violet-500/10 text-[#c4b5fd]'
+                              }`}
+                            >
+                              {milestone.version}
+                            </span>
+                            <span className="font-mono text-[10px] tracking-[0.12em] text-zinc-400">
+                              {milestone.tag}
+                            </span>
+                          </div>
+
+                          <h3 className="font-display mt-2.5 text-base font-semibold tracking-tight text-white sm:text-xl">
+                            {milestone.title}
+                          </h3>
+                        </div>
+
+                        <span
+                          aria-hidden="true"
+                          className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-zinc-300 transition-colors group-hover:border-violet-400/40"
+                        >
+                          <ChevronDown
+                            className={`h-4 w-4 transition-transform duration-300 ease-out ${
+                              isExpanded
+                                ? 'rotate-180 text-[#e5cca0]'
+                                : 'rotate-0 text-zinc-400'
+                            }`}
+                          />
+                        </span>
+                      </button>
+
+                      <div
+                        id={panelId}
+                        className={`relative z-10 grid transition-[grid-template-rows,opacity] duration-300 ease-out ${
+                          isExpanded
+                            ? 'grid-rows-[1fr] opacity-100'
+                            : 'grid-rows-[0fr] opacity-0'
+                        }`}
+                      >
+                        <div className="overflow-hidden">
+                          <p className="border-t border-white/[0.07] px-5 pt-3.5 pb-5 text-sm leading-relaxed text-[#a1a1aa] sm:px-6 sm:pb-6">
+                            {milestone.body}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </article>
+                );
+              })}
             </div>
           </div>
         </section>
@@ -3015,7 +3232,7 @@ export function LandingShell({
                     onClick={() =>
                       setPendingDownloadTarget({
                         label: copy.launch.setupDownload,
-                        url: GITHUB_RELEASES_URL,
+                        url: latestRelease.windowsSetupUrl,
                       })
                     }
                     className={`inline-flex min-h-[44px] cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap rounded-full px-4 py-2 text-xs font-medium transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#e5cca0] ${SECONDARY_GLASS_BUTTON}`}
@@ -3031,7 +3248,7 @@ export function LandingShell({
                     onClick={() =>
                       setPendingDownloadTarget({
                         label: copy.launch.portableDownload,
-                        url: GITHUB_RELEASES_URL,
+                        url: latestRelease.windowsPortableUrl,
                       })
                     }
                     className={`inline-flex min-h-[44px] cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap rounded-full px-4 py-2 text-xs font-medium transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#e5cca0] ${SECONDARY_GLASS_BUTTON}`}
@@ -3042,6 +3259,18 @@ export function LandingShell({
                     />
                     <span>{copy.launch.portableDownload}</span>
                   </button>
+                  <a
+                    href={latestRelease.androidApkUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={`inline-flex min-h-[44px] cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap rounded-full px-4 py-2 text-xs font-medium transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#a78bfa] ${SECONDARY_GLASS_BUTTON}`}
+                  >
+                    <Smartphone
+                      className="h-3.5 w-3.5 text-[#c4b5fd]"
+                      aria-hidden="true"
+                    />
+                    <span>{copy.launch.androidDownload}</span>
+                  </a>
                 </div>
               </div>
 
