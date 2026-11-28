@@ -2,11 +2,14 @@
 
 ## Supported Versions / Versiones Soportadas
 
+
 | Version | Status | Security Baseline |
 | :--- | :--- | :--- |
-| **v1.5.x** | ✅ Supported (Latest) | Full CSP, IPC Lockdown, Electron Fuses, DPAPI, Multi-Mesh VPN & Mobile Link Auth |
+| **v1.6.x** | ✅ Supported (Latest) | Full CSP, IPC Lockdown, Electron Fuses, DPAPI, Multi-Mesh VPN, Mobile Link Auth & Native Android GGUF/JNI Hardening |
+| **v1.5.x** | ⚠️ Legacy | Full CSP, IPC Lockdown, Electron Fuses, DPAPI, Multi-Mesh VPN & Mobile Link Auth |
 | **v1.4.1** | ⚠️ Legacy | Full CSP, IPC Lockdown, Electron Fuses, DPAPI |
-| `< 1.4.0` | ❌ Unsupported | Upgrade to v1.5.x |
+| < 1.4.0 | ❌ Unsupported | Upgrade to v1.6.x |
+
 
 ---
 
